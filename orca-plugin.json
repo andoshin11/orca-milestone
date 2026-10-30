@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "milestone",
+  "publisher": "andoshin11",
+  "name": "Milestone",
+  "version": "0.1.0",
+  "description": "Orca plugin scaffold for milestone features (work in progress).",
+  "author": { "name": "andoshin11", "url": "https://github.com/andoshin11" },
+  "repository": "https://github.com/andoshin11/orca-milestone",
+  "engines": { "orca": ">=1.4.223" },
+  "pluginApi": 1,
+  "main": "main.mjs",
+  "contributes": {
+    "commands": [{ "id": "milestone.hello", "title": "Milestone: Hello" }]
+  },
+  "capabilities": []
+}
