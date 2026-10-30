@@ -1,2 +1,4 @@
 node_modules/
 .orca/
+# Written by the worker at run time.
+panel/

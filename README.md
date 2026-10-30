@@ -1,48 +1,74 @@
 # orca-milestone
 
-[Orca](https://github.com/stablyai/orca) の plugin です。現在は雛形で、動作確認用のコマンドを 1 つだけ持っています。
+[Orca](https://github.com/stablyai/orca) の plugin です。フォーカス中のワークスペースで Claude Code が進めているタスクを、ゴールまでのマイルストーンとして右サイドバーに表示します。タスクが進むと、1 秒以内に表示が変わります。
 
 > [!WARNING]
-> Orca の plugin 機能は Alpha です。この plugin は manifest format 2（`execution: trusted-worker`）で書いており、Orca 1.4.245 以上を対象にしています。
+> Orca の plugin 機能は Alpha です。この plugin は Orca 1.4.245 以上を対象にしており、**開発フォルダーとして読み込んだときだけ**表示がリアルタイムに更新されます（[仕組み](#仕組み)）。
 
 ## できること
 
-- コマンド **「Milestone: Hello」** を実行すると、plugin のログに `milestone: hello` を出します。
+- 右サイドバーの旗アイコン（**Milestones**）に、フォーカス中のワークスペースの Claude セッションごとに次を表示します（新しい順に最大 3 件）。
+  - 最初の依頼文（ゴール）
+  - 完了したタスク数と進捗バー
+  - タスクの一覧（✓ 完了・● 進行中・○ 未着手）
+- ワークスペースを切り替えると、表示もそのワークスペースのものに変わります。
+- Claude はすべてのタスクを完了するとタスク一覧を消しますが、この plugin は完了した状態のまま表示を残します（plugin を再起動するまで）。
+- 対象は Claude Code だけです。
 
 ## 必要なもの
 
-- Orca 1.4.245 以上（plugin 機能は既定で有効です）
+- Orca 1.4.245 以上（macOS で確認）
+- Node.js 24 以上（初回のセットアップに使います）
+- Claude Code がタスクを作ること。Opus 4.7・Sonnet 4.6 より新しいモデルでは、Claude Code はタスク用のツールを既定で使いません。`~/.claude/settings.json` に次を加えると、新しく起動するセッションから使います。
+
+  ```json
+  { "env": { "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1" } }
+  ```
 
 ## インストール
 
-Orca の **Settings → Plugins** で、Git URL を指定してインストールします。
+1. clone して、パネルの初期ファイルを作ります。
 
-1. **プラグインをインストール** を押し、**Git URL** を選んで次の URL を入力します。
-
-   ```text
-   https://github.com/andoshin11/orca-milestone#v0.1.0
+   ```sh
+   git clone https://github.com/andoshin11/orca-milestone.git
+   cd orca-milestone
+   npm run setup
    ```
 
-   `#` の後ろは使うバージョンのタグです。[Tags](https://github.com/andoshin11/orca-milestone/tags) から選んでください。
-2. 一覧の「Milestone」で **Review** を押し、承認します。Node のワーカーを動かすため、コードを実行する plugin として承認を求められます（host API の権限は要求しません）。
+   Orca はパネルのファイルがない plugin を読み込まないため、最初の 1 回だけ必要です（`npm install` でも作られます）。
+2. Orca の **Settings → Plugins → ⋯ → Development folders…** で、clone したフォルダーを追加します。
+3. 一覧の「Milestone」で **確認** を押し、有効にします。Node のワーカーを動かすため、フルアクセスの plugin として承認を求められます。host API で使う権限は、ワークスペースの名前・ブランチの読み取りと Agent ステータスの通知です。
+4. 右サイドバーの旗アイコンを開きます。表示が空のままなら、コマンドパレットで **Milestone: Refresh** を実行します（ワーカーは最初のコマンドかイベントで起動します）。
 
-Orca はリポジトリの中身をそのままコピーし、ビルドや `npm install` は行いません。この plugin には実行時の依存パッケージがありません（`devDependencies` は manifest の検証用です）。
+## 仕組み
 
-### 開発中のコードを試す
+```mermaid
+flowchart LR
+  claude["Claude Code"] -- "タスクを書き込む" --> tasks["~/.claude/tasks/&lt;session-id&gt;/*.json"]
+  claude -- "会話を記録" --> transcript["~/.claude/projects/*/&lt;session-id&gt;.jsonl<br/>（cwd・最初の依頼文）"]
+  worker["ワーカー（main.mjs）"] -- "fs.watch" --> tasks
+  worker -- "先頭だけ読む" --> transcript
+  worker -- "workspace.readContext（毎秒）<br/>orca worktree ps（フォーカスが変わったとき）" --> orca["Orca"]
+  worker -- "書き換え" --> panel["panel/index.html"]
+  orca -- "開発フォルダーを監視し<br/>パネルを読み直す" --> panel
+```
 
-clone したフォルダを **ローカルフォルダー** として読み込むと、手元の変更をそのまま試せます。
+- Orca の plugin パネルは、ワーカーからデータを受け取れません（CSP が `connect-src 'none'` で、ワーカーとの通信路もありません）。そのため、ワーカーがパネルの HTML ファイルそのものを書き換えます。
+- Orca は開発フォルダーを監視していて、ファイルが変わるとパネルの HTML を読み直し、内容が違えばパネルを作り直します。Git URL やカタログからのインストールでは、この更新は起きません。
+- パネルは更新のたびに作り直されるため、スクロール位置は保たれません。内容が変わったときだけ書き換えます。
+- フォーカス中のワークスペースのパスは、`workspace.readContext` が返さないため、Orca に同梱の CLI（`orca worktree ps`）で調べます。セッションは、transcript に記録された作業ディレクトリがそのパスの中にあるものを表示します。
 
 ## 開発
 
 ```sh
-npm ci --ignore-scripts
+npm ci
 npm test
 
 # Orca 本体の parser で orca-plugin.json を検証する（stablyai/orca の checkout が必要）
 ORCA_SOURCE_DIR=/path/to/orca npm run check:manifest
 ```
 
-CI では `engines.orca` と同じ Orca のタグ（v1.4.245）を取得して、manifest を検証します。
+ワーカーのコードを変えたら、Settings → Plugins で Milestone をいったんオフにしてからオンに戻すと、新しいコードで起動します。CI では `engines.orca` と同じ Orca のタグ（v1.4.245）を取得して、manifest を検証します。
 
 ## ライセンス
 
