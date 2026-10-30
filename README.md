@@ -3,7 +3,7 @@
 [Orca](https://github.com/stablyai/orca) の plugin です。現在は雛形で、動作確認用のコマンドを 1 つだけ持っています。
 
 > [!WARNING]
-> Orca の plugin 機能は experimental です（pluginApi v1、互換性の保証なし）。この plugin は Orca 1.4.223 以上を対象にしています。
+> Orca の plugin 機能は Alpha です。この plugin は manifest format 2（`execution: trusted-worker`）で書いており、Orca 1.4.245 以上を対象にしています。
 
 ## できること
 
@@ -11,22 +11,20 @@
 
 ## 必要なもの
 
-- Orca 1.4.223 以上
-- Settings → Plugins で plugin 機能を有効にしていること（既定では無効）
+- Orca 1.4.245 以上（plugin 機能は既定で有効です）
 
 ## インストール
 
 Orca の **Settings → Plugins** で、Git URL を指定してインストールします。
 
-1. plugin 機能のトグルを ON にします。
-2. **プラグインをインストール** を押し、**Git URL** を選んで次の URL を入力します。
+1. **プラグインをインストール** を押し、**Git URL** を選んで次の URL を入力します。
 
    ```text
    https://github.com/andoshin11/orca-milestone#v0.1.0
    ```
 
    `#` の後ろは使うバージョンのタグです。[Tags](https://github.com/andoshin11/orca-milestone/tags) から選んでください。
-3. 一覧の「Milestone」で **Review** を押し、承認します（要求する権限はありません）。
+2. 一覧の「Milestone」で **Review** を押し、承認します。Node のワーカーを動かすため、コードを実行する plugin として承認を求められます（host API の権限は要求しません）。
 
 Orca はリポジトリの中身をそのままコピーし、ビルドや `npm install` は行いません。この plugin には実行時の依存パッケージがありません（`devDependencies` は manifest の検証用です）。
 
@@ -44,7 +42,7 @@ npm test
 ORCA_SOURCE_DIR=/path/to/orca npm run check:manifest
 ```
 
-CI では `engines.orca` と同じ Orca のタグ（v1.4.223）を取得して、manifest を検証します。
+CI では `engines.orca` と同じ Orca のタグ（v1.4.245）を取得して、manifest を検証します。
 
 ## ライセンス
 
