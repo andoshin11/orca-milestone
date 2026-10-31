@@ -86,5 +86,9 @@ test('other workspaces list those needing the user first, with progress, and lea
   assert.equal(html.match(/class="badge"/g).length, 2)
   assert.ok(html.includes('width:50%'))
   assert.ok(!html.includes('finished'))
+  // Rows with tasks open on a click to their goal and tasks; rows without stay plain.
+  assert.equal(html.match(/<details>/g).length, 2)
+  assert.ok(html.includes('<p class="goal">Q</p>'))
+  assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
   assert.equal(renderPanel(model), html)
 })

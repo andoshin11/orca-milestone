@@ -30,7 +30,7 @@ function buildOthers(agents, sessions) {
   }
   const rows = [...byWorkspace.values()].map((entry) => {
     const session = sessions.find((s) => s.cwd && s.tasks.length > 0 && isInside(s.cwd, entry.path))
-    const counts = session ? progress(session.tasks) : { done: 0, total: 0 }
+    const counts = session ? progress(session.tasks) : { done: 0, total: 0, tasks: [] }
     return {
       workspace: entry.workspace,
       focused: entry.focused,
@@ -40,8 +40,8 @@ function buildOthers(agents, sessions) {
           ? 'working'
           : 'idle',
       since: entry.since,
-      done: counts.done,
-      total: counts.total
+      goal: session?.goal ?? null,
+      ...counts
     }
   })
   const rank = { attention: 0, working: 1, idle: 2 }

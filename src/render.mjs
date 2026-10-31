@@ -63,7 +63,14 @@ code { font-size: 12px; }
   font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
 .others h2 .attention { color: var(--ms-todo); }
 .rows { margin: 0; padding: 0; list-style: none; }
-.row { display: block; padding: 4px 0; }
+.row { display: block; padding: 0; }
+.row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; }
+.row summary { cursor: pointer; list-style: none; }
+.row summary::-webkit-details-marker { display: none; }
+.row summary:hover { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
+.row details[open] > summary { background: color-mix(in oklch, var(--orca-foreground) 5%, transparent); }
+.row .detail { margin: 4px 0 8px 14px; font-size: 12px; }
+.row .detail .goal { margin: 0 0 4px; }
 .row .top { display: flex; align-items: center; gap: 6px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
 .row.working .dot { background: none; border: 2px solid var(--ms-working); }
@@ -96,7 +103,13 @@ function renderRow(row) {
   const badge = row.kind === 'attention' ? '<span class="badge">要確認</span>' : ''
   const of = row.total > 0 ? `<span class="of">${row.done} / ${row.total}</span>` : ''
   const bar = row.total > 0 ? `<div class="bar"><div style="width:${percent}%"></div></div>` : ''
-  return `<li class="row ${row.kind}"><div class="top"><span class="dot"></span><span class="name">${escape(row.workspace)}</span>${badge}${of}</div>${bar}</li>`
+  const head = `<div class="top"><span class="dot"></span><span class="name">${escape(row.workspace)}</span>${badge}${of}</div>${bar}`
+  if (row.total === 0) return `<li class="row ${row.kind}"><div class="head">${head}</div></li>`
+  // A click opens the goal and the tasks. No script: the panel is rebuilt whenever its content
+  // changes, which closes the row again.
+  const goal = row.goal ? `<p class="goal">${escape(clip(row.goal, GOAL_MAX))}</p>` : ''
+  return `<li class="row ${row.kind}"><details><summary class="head">${head}</summary>
+<div class="detail">${goal}<ol>${row.tasks.map(renderTask).join('')}</ol></div></details></li>`
 }
 
 function renderOthers(others) {
@@ -118,8 +131,7 @@ function renderFocused(model) {
   const agent = AGENT_LABELS[model.agent] ?? ''
   const header = `<header><h1>${escape(model.workspace)}</h1><span class="agent ${model.agent}">${agent}</span></header>`
   if (model.kind === 'no-tasks') {
-    return `${header}<p class="empty">このワークスペースの Claude はまだタスクを作っていません。</p>
-<p class="empty">Claude がタスクを作るには、<code>CLAUDE_CODE_ENABLE_TODO_TOOLS=1</code> を設定して起動します。</p>`
+    return `${header}<p class="empty">このワークスペースの Claude はまだタスクを作っていません。</p>`
   }
   return header + model.sessions.map(renderSession).join('')
 }
