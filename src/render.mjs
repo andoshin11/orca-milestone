@@ -24,11 +24,12 @@ const AGENT_LABELS = {
 }
 
 // Panels only get Orca's neutral tokens, so the status hues are Orca's own Tailwind v4 values
-// copied from its sources: green is the emerald of the sidebar's status dot (progress, done),
-// orange is --agent-question (the task in progress, waiting), yellow is --agent-working. Orca puts `dark`
+// copied from its sources: the bars are the green-600 of its merge button, other greens the
+// emerald of the sidebar's status dot (done), orange is --agent-question (the task in progress,
+// waiting), yellow is --agent-working. Orca puts `dark`
 // or `light` on the panel's <html>, which picks the shade for each theme.
 const STYLE = `
-:root { color-scheme: light dark;
+:root { color-scheme: light dark; --ms-bar: oklch(62.7% 0.194 149.214);
   --ms-done: oklch(59.6% 0.145 163.225); --ms-todo: oklch(64.6% 0.222 41.116);
   --ms-working: oklch(68.1% 0.162 75.834); --ms-track: color-mix(in oklch, var(--orca-foreground) 12%, transparent); }
 html.dark { --ms-done: oklch(69.6% 0.17 162.48); --ms-todo: oklch(70.5% 0.213 47.604);
@@ -47,7 +48,7 @@ section { padding: 10px; margin-bottom: 10px; border: 1px solid var(--orca-borde
 .count { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--orca-muted-foreground); }
 .count strong { font-size: 12px; color: var(--ms-done); }
 .bar { height: 6px; margin: 4px 0 10px; border-radius: 3px; background: var(--ms-track); overflow: hidden; }
-.bar > div { height: 100%; border-radius: 3px; background: var(--ms-done); }
+.bar > div { height: 100%; border-radius: 3px; background: var(--ms-bar); }
 ol { margin: 0; padding: 0; list-style: none; }
 li { display: flex; gap: 8px; padding: 2px 0; }
 li .mark { flex: none; width: 1em; text-align: center; font-weight: 700; color: var(--ms-todo); }
