@@ -15,6 +15,11 @@
   - 完了したタスク数と進捗バー
   - タスクの一覧（✓ 完了・● 進行中・○ 未着手）
 - ワークスペースを切り替えると、表示もそのワークスペースのものに変わります。
+- その下に「このマシンの Claude」として、Orca で動いているすべての Claude の状況を表示します。
+  - 確認待ち・作業中・待機の件数
+  - 確認待ち（入力待ち・許可待ち・終わったがまだ開いていない「未確認」）を待ち時間の長い順に、作業中を新しい順に、それぞれ最大 8 件。ワークスペース名、状態になってからの時間、ゴール、進捗を 1 行ずつ出します。
+  - フォーカス中のワークスペースは上に詳しく出ているので、件数にだけ含めます。
+  - 行をクリックしてそのワークスペースへ移ることはできません（パネルから Orca を操作する API がないため）。
 - Claude はすべてのタスクを完了するとタスク一覧を消しますが、この plugin は完了した状態のまま表示を残します（plugin を再起動するまで）。
 - 対象は Claude Code だけです。Orca の Agent Teams で起動した Claude（`claude --teammate-mode`）にも対応しています。
 
@@ -65,7 +70,7 @@ flowchart LR
   claude -- "会話を記録" --> transcript["~/.claude/projects/*/&lt;session-id&gt;.jsonl<br/>（cwd・依頼文）"]
   worker["ワーカー（main.mjs）"] -- "fs.watch" --> tasks
   worker -- "先頭だけ読む" --> transcript
-  worker -- "workspace.readContext（毎秒）<br/>orca worktree ps（フォーカスが変わったとき）" --> orca["Orca"]
+  worker -- "workspace.readContext（毎秒）<br/>orca worktree ps（3 秒ごと・フォーカスが変わったとき）" --> orca["Orca"]
   worker -- "書き換え" --> panel["panel/index.html"]
   orca -- "開発フォルダーを監視し<br/>パネルを読み直す" --> panel
 ```
@@ -75,6 +80,7 @@ flowchart LR
 - パネルは更新のたびに作り直されるため、スクロール位置は保たれません。内容が変わったときだけ書き換えます。
 - Agent Teams を率いる Claude は、タスク一覧をチーム名（`session-<セッション ID の先頭 8 桁>`）のフォルダーに書きます。どのセッションのものかは、`~/.claude/teams/<チーム名>/config.json` のリーダーのセッション ID か、なければ先頭 8 桁が一致する transcript で決めます。
 - フォーカス中のワークスペースのパスは、`workspace.readContext` が返さないため、Orca に同梱の CLI（`orca worktree ps`）で調べます。セッションは、transcript に記録された作業ディレクトリがそのパスの中にあるものを表示します。
+- ほかのワークスペースの Agent の状態は、ワーカーに届くイベントがないため、3 秒ごとに `orca worktree ps` で取り直します（1 回 0.1〜0.2 秒）。経過時間は分単位なので、パネルの作り直しは多くても 1 分に 1 回程度です。
 
 ## 開発
 

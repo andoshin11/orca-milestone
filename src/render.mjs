@@ -57,6 +57,29 @@ li.completed .subject { text-decoration: line-through; }
 li.in_progress { font-weight: 600; }
 .empty { color: var(--orca-muted-foreground); }
 code { font-size: 12px; }
+.machine { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--orca-border); }
+.machine h2 { margin: 0 0 4px; font-size: 12px; font-weight: 600; }
+.tally { display: flex; gap: 10px; margin: 0 0 10px; font-size: 11px; color: var(--orca-muted-foreground); }
+.tally b { font-size: 13px; }
+.tally .attention b { color: var(--ms-todo); }
+.tally .working b { color: var(--ms-working); }
+.machine h3 { margin: 10px 0 4px; font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
+.rows { margin: 0; padding: 0; list-style: none; }
+.row { display: flex; gap: 8px; padding: 5px 0; }
+.row + .row { border-top: 1px solid color-mix(in oklch, var(--orca-border) 60%, transparent); }
+.row .dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; }
+.row.attention .dot { background: var(--ms-todo); }
+.row.attention.review .dot { background: var(--ms-done); }
+.row.working .dot { border: 2px solid var(--ms-working); width: 4px; height: 4px; }
+.row .main { min-width: 0; flex: 1; }
+.row .top, .row .bottom { display: flex; justify-content: space-between; gap: 8px; }
+.row .name { min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .meta { flex: none; font-size: 11px; color: var(--orca-muted-foreground); }
+.row.attention .meta { color: var(--ms-todo); }
+.row.attention.review .meta { color: var(--ms-done); }
+.row .bottom { font-size: 11px; color: var(--orca-muted-foreground); }
+.row .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .of { flex: none; color: var(--ms-done); }
 `
 
 const MARKS = { completed: '✓', in_progress: '●', pending: '○' }
@@ -75,7 +98,39 @@ function renderSession(session) {
 <ol>${session.tasks.map(renderTask).join('')}</ol></section>`
 }
 
+const REASON_LABELS = { input: '入力待ち', permission: '許可待ち', review: '未確認' }
+
+function ageLabel(age) {
+  if (!age) return ''
+  if (age.unit === 'now') return '今'
+  return `${age.value}${{ minutes: '分', hours: '時間', days: '日' }[age.unit]}`
+}
+
+function renderRow(row) {
+  // How long the agent has been in its state: waiting for the user, or at work.
+  const meta = [REASON_LABELS[row.reason], ageLabel(row.age)].filter(Boolean).join(' ')
+  const what = row.goal ? `<span class="what">${escape(clip(row.goal, GOAL_MAX))}</span>` : '<span class="what"></span>'
+  const of = row.total > 0 ? `<span class="of">${row.done} / ${row.total}</span>` : ''
+  return `<li class="row ${row.kind}${row.reason ? ` ${row.reason}` : ''}"><span class="dot"></span><div class="main">
+<div class="top"><span class="name">${escape(row.workspace)}</span><span class="meta">${meta}</span></div>
+<div class="bottom">${what}${of}</div></div></li>`
+}
+
+function renderMachine(machine) {
+  if (!machine) return ''
+  const { counts } = machine
+  if (counts.attention + counts.working + counts.idle === 0) return ''
+  const list = (title, rows) => (rows.length > 0 ? `<h3>${title}</h3><ol class="rows">${rows.map(renderRow).join('')}</ol>` : '')
+  return `<div class="machine"><h2>このマシンの Claude</h2>
+<p class="tally"><span class="attention">確認待ち <b>${counts.attention}</b></span><span class="working">作業中 <b>${counts.working}</b></span><span>待機 <b>${counts.idle}</b></span></p>
+${list('確認待ち', machine.attention)}${list('作業中', machine.working)}</div>`
+}
+
 function renderBody(model) {
+  return renderFocused(model) + renderMachine(model.machine)
+}
+
+function renderFocused(model) {
   if (model.kind === 'no-workspace') {
     return '<p class="empty">ワークスペースを開くと、Claude の進捗をここに表示します。</p>'
   }

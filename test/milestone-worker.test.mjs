@@ -23,9 +23,9 @@ test('refresh writes the focused workspace tasks to the panel, and only when the
     home,
     panelPath,
     cli: 'orca',
-    readActive: async () => {
+    readOrca: async () => {
       cliCalls += 1
-      return { path: '/work/app', displayName: 'app', claudeStates: ['working'] }
+      return { active: { path: '/work/app', displayName: 'app', claudeStates: ['working'] }, agents: [] }
     },
     watchDir: () => {}
   })
@@ -55,7 +55,7 @@ test('a list Claude deletes after finishing stays on screen as done; a cleared u
     home,
     panelPath,
     cli: 'orca',
-    readActive: async () => ({ path: '/work/app', displayName: 'app', claudeStates: [] }),
+    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
     watchDir: () => {}
   })
   await worker.refresh(true)
@@ -79,7 +79,7 @@ test('a team lead\'s list, named session-<id prefix>, shows under its workspace'
     home,
     panelPath,
     cli: 'orca',
-    readActive: async () => ({ path: '/work/app', displayName: 'app', claudeStates: [] }),
+    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
     watchDir: () => {}
   })
   await worker.refresh(true)
@@ -106,7 +106,7 @@ test('the heading follows the goal of the current tasks, not the first prompt of
     home,
     panelPath,
     cli: 'orca',
-    readActive: async () => ({ path: '/work/app', displayName: 'app', claudeStates: [] }),
+    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
     watchDir: () => {}
   })
   await worker.refresh(true)
@@ -134,7 +134,7 @@ test('a failing CLI leaves the panel showing that no workspace is known', async 
     home,
     panelPath,
     cli: 'orca',
-    readActive: async () => {
+    readOrca: async () => {
       throw new Error('runtime unavailable')
     },
     watchDir: () => {}

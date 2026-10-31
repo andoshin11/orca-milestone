@@ -1,4 +1,5 @@
-// Keeps the panel document in step with the focused workspace and Claude's task lists.
+// Keeps the panel document in step with the focused workspace, Claude's task lists and the state
+// of every Claude agent Orca runs.
 //
 // Panels cannot receive data from a worker (their CSP is connect-src 'none' and there is no
 // channel), so the worker rewrites the panel's HTML file instead. Orca rereads a panel's HTML on
@@ -16,12 +17,14 @@ import {
   readTaskList,
   readTranscriptHead
 } from './claude-sessions.mjs'
-import { buildModel, isInside } from './model.mjs'
-import { readActiveWorkspace } from './orca-cli.mjs'
+import { buildModel } from './model.mjs'
+import { readWorkspaces } from './orca-cli.mjs'
 import { renderPanel } from './render.mjs'
 
 const TASK_LIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const FOCUS_POLL_MS = 1000
+// Other workspaces change state without any event the worker sees, so Orca is asked again.
+const AGENTS_POLL_MS = 3000
 const DEBOUNCE_MS = 150
 const REQUEST_RETRY_MS = 30_000
 
@@ -30,7 +33,7 @@ export function createMilestoneWorker({
   home,
   panelPath,
   cli,
-  readActive = readActiveWorkspace,
+  readOrca = readWorkspaces,
   now = Date.now,
   watchDir = (dir, onChange) => watch(dir, { recursive: true }, onChange)
 }) {
@@ -44,6 +47,7 @@ export function createMilestoneWorker({
   // list keep a finished goal on screen as done instead of letting it vanish.
   const lastTasks = new Map()
   let workspace = null
+  let agents = []
   let focusKey
   let lastHtml = null
   let started = null
@@ -80,7 +84,7 @@ export function createMilestoneWorker({
     return { goal: request.prompt ?? head.goal, tasks }
   }
 
-  async function sessionsIn(root) {
+  async function allSessions() {
     const lists = await listRecentTaskLists(tasksRoot, { maxAgeMs: TASK_LIST_MAX_AGE_MS })
     const sessions = []
     for (const list of lists) {
@@ -88,7 +92,7 @@ export function createMilestoneWorker({
       // A team creates its list when it starts, and most stay empty; they are not looked up.
       if (tasks.length === 0) continue
       const head = await headOf(list.listId)
-      if (!head?.cwd || !isInside(head.cwd, root)) continue
+      if (!head?.cwd) continue
       sessions.push({ ...list, cwd: head.cwd, ...(await goalOf(list.listId, head, tasks)) })
     }
     return sessions
@@ -113,16 +117,16 @@ export function createMilestoneWorker({
     lastHtml = html
   }
 
-  async function refreshOnce(focusChanged) {
-    if (focusChanged || !workspace) {
+  async function refreshOnce(askOrca) {
+    if (askOrca || !workspace) {
       try {
-        workspace = await readActive(cli)
+        ;({ active: workspace, agents } = await readOrca(cli))
       } catch (error) {
-        orca.log(`milestone: could not read the focused workspace: ${error.message}`)
+        orca.log(`milestone: could not read the workspaces: ${error.message}`)
       }
     }
-    const sessions = workspace ? await sessionsIn(workspace.path) : []
-    await writePanel(renderPanel(buildModel(workspace, sessions)))
+    const sessions = await allSessions()
+    await writePanel(renderPanel(buildModel(workspace, sessions, agents, now())))
   }
 
   /** Runs refreshes one at a time; a request during a run starts one more afterwards. */
@@ -179,6 +183,7 @@ export function createMilestoneWorker({
         if (name && !String(name).endsWith('.lock')) schedule()
       })
       setInterval(() => void pollFocus(), FOCUS_POLL_MS)
+      setInterval(() => schedule(true), AGENTS_POLL_MS)
       await pollFocus()
       await refresh(true)
     })()
