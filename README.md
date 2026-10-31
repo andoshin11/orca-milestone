@@ -1,9 +1,16 @@
 # orca-milestone
 
-[Orca](https://github.com/stablyai/orca) の plugin です。フォーカス中のワークスペースで Claude Code が進めているタスクを、ゴールまでのマイルストーンとして右サイドバーに表示します。タスクが進むと、1 秒以内に表示が変わります。
+[Orca](https://github.com/stablyai/orca) の plugin です。フォーカス中のワークスペースで Claude Code が進めているタスクを、ゴールまでのマイルストーンとして右サイドバーに表示します。タスクが進むと、数秒以内に表示が変わります。
 
 > [!WARNING]
 > Orca の plugin 機能は Alpha です。この plugin は Orca 1.4.245 以上を対象にしており、**開発フォルダーとして読み込んだときだけ**表示がリアルタイムに更新されます（[仕組み](#仕組み)）。
+
+<p>
+  <img src="docs/images/panel.png" width="300" alt="Milestones パネル。上部にフォーカス中のワークスペースのゴールとタスク、下端にほかのワークスペースの進捗が並ぶ">
+  <img src="docs/images/panel-hover.png" width="300" alt="ほかのワークスペースの行にマウスを乗せると、そのワークスペースのゴールとタスクが重なって表示される">
+</p>
+
+左が通常の表示、右がほかのワークスペースの行にマウスを乗せたときです（ワークスペース名やタスクはすべてダミーデータです）。
 
 ## できること
 
@@ -90,6 +97,13 @@ npm test
 
 # Orca 本体の parser で orca-plugin.json を検証する（stablyai/orca の checkout が必要）
 ORCA_SOURCE_DIR=/path/to/orca npm run check:manifest
+```
+
+README のスクリーンショットは、ダミーデータでパネルを描いたページから撮っています。
+
+```sh
+node scripts/render-sample.mjs /tmp/sample.html          # 通常の表示
+node scripts/render-sample.mjs /tmp/sample-hover.html --hover   # 行にマウスを乗せたとき
 ```
 
 ワーカーのコードを変えたら、Settings → Plugins で Milestone をいったんオフにしてからオンに戻すと、新しいコードで起動します。CI では `engines.orca` と同じ Orca のタグ（v1.4.245）を取得して、manifest を検証します。
