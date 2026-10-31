@@ -82,7 +82,7 @@ code { font-size: 12px; }
 .row .detail .title .of { flex: none; }
 .row .top { display: flex; align-items: center; gap: 6px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
-.row.attention .dot { background: var(--ms-todo); }
+.row.attention .dot, .row .dot.running { background: var(--ms-todo); }
 .row .check { flex: none; width: 8px; font-size: 11px; font-weight: 700; line-height: 1; text-align: center; color: var(--ms-done); }
 .row .name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .repo { margin-left: 6px; font-size: 11px; color: var(--orca-muted-foreground); }
@@ -114,9 +114,15 @@ function renderRow(row) {
   const of = row.total > 0 ? `<span class="of">${row.done} / ${row.total}</span>` : ''
   const bar = row.total > 0 ? `<div class="bar"><div style="width:${percent}%"></div></div>` : ''
   const repo = row.repo ? `<span class="repo">${escape(row.repo)}</span>` : ''
-  // Every task done, nothing asked of the user: a check instead of the dot.
+  // Every task done, nothing asked of the user: a check instead of the dot. A task in
+  // progress turns the dot orange, like its mark in the list.
   const finished = row.kind !== 'attention' && row.total > 0 && row.done === row.total
-  const mark = finished ? '<span class="check">✓</span>' : '<span class="dot"></span>'
+  const running = row.kind !== 'attention' && row.tasks.some((task) => task.status === 'in_progress')
+  const mark = finished
+    ? '<span class="check">✓</span>'
+    : running
+      ? '<span class="dot running"></span>'
+      : '<span class="dot"></span>'
   const head = `<div class="top">${mark}<span class="name">${escape(row.workspace)}${repo}</span>${badge}${of}</div>${bar}`
   if (row.total === 0) return `<li class="row ${row.kind}"><div class="head">${head}</div></li>`
   // Hovering a row shows its goal and tasks; plain CSS, so it needs no script.
