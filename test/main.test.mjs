@@ -6,27 +6,15 @@ import activate from '../main.mjs'
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'orca-plugin.json'), 'utf8'))
 
-test('registers exactly the commands declared in the manifest', () => {
-  const commands = {}
+test('registers the commands and events declared in the manifest, and starts nothing on activate', () => {
+  const commands = []
+  const events = []
   activate({
-    events: { on: () => assert.fail('no event subscriptions are declared') },
-    commands: { register: (id, handler) => (commands[id] = handler) },
+    host: { call: () => assert.fail('activate must not call the host') },
+    events: { on: (event) => events.push(event) },
+    commands: { register: (id) => commands.push(id) },
     log: () => {}
   })
-  assert.deepEqual(
-    Object.keys(commands),
-    manifest.contributes.commands.map((command) => command.id)
-  )
-})
-
-test('milestone.hello writes to the plugin log', () => {
-  const commands = {}
-  const lines = []
-  activate({
-    events: { on: () => {} },
-    commands: { register: (id, handler) => (commands[id] = handler) },
-    log: (line) => lines.push(line)
-  })
-  commands['milestone.hello']()
-  assert.deepEqual(lines, ['milestone: hello'])
+  assert.deepEqual(commands, manifest.contributes.commands.map((command) => command.id))
+  assert.deepEqual(events, manifest.contributes.events.map((event) => event.on))
 })

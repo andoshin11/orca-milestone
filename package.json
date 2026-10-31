@@ -2,13 +2,15 @@
   "name": "orca-milestone",
   "version": "0.2.0",
   "private": true,
-  "description": "Orca plugin scaffold for milestone features.",
+  "description": "Orca plugin that shows the Claude Code tasks of the focused workspace as milestones in the right sidebar.",
   "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
+    "setup": "node scripts/setup-panel.mjs",
+    "prepare": "node scripts/setup-panel.mjs",
     "test": "node --test \"test/**/*.test.mjs\"",
     "check:manifest": "node scripts/check-manifest.mjs"
   },

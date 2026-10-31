@@ -6,7 +6,7 @@
   "publisher": "andoshin11",
   "name": "Milestone",
   "version": "0.2.0",
-  "description": "Orca plugin scaffold for milestone features (work in progress).",
+  "description": "Shows the tasks Claude Code is working through in the focused workspace as milestones in the right sidebar.",
   "author": { "name": "andoshin11", "url": "https://github.com/andoshin11" },
   "repository": "https://github.com/andoshin11/orca-milestone",
   "license": "MIT",
@@ -14,7 +14,9 @@
   "pluginApi": 1,
   "main": "main.mjs",
   "contributes": {
-    "commands": [{ "id": "milestone.hello", "title": "Milestone: Hello" }]
+    "panels": [{ "id": "milestones", "title": "Milestones", "icon": "flag", "entry": "panel/index.html" }],
+    "commands": [{ "id": "milestone.refresh", "title": "Milestone: Refresh" }],
+    "events": [{ "on": "agent.status.changed" }]
   },
-  "capabilities": []
+  "capabilities": [{ "kind": "workspace:read" }, { "kind": "agent:read" }]
 }
