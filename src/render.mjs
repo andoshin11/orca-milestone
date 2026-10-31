@@ -24,14 +24,14 @@ const AGENT_LABELS = {
 }
 
 // Panels only get Orca's neutral tokens, so the status hues are Orca's own Tailwind v4 values
-// copied from its main.css: orange is --agent-question (unfinished tasks, waiting), yellow is
-// --agent-working. Progress is a light green that stands out on a dark sidebar. Orca puts `dark`
+// copied from its sources: green is the emerald of the sidebar's status dot (progress, done),
+// orange is --agent-question (the task in progress, waiting), yellow is --agent-working. Orca puts `dark`
 // or `light` on the panel's <html>, which picks the shade for each theme.
 const STYLE = `
 :root { color-scheme: light dark;
-  --ms-done: oklch(62.7% 0.194 149.214); --ms-todo: oklch(64.6% 0.222 41.116);
+  --ms-done: oklch(59.6% 0.145 163.225); --ms-todo: oklch(64.6% 0.222 41.116);
   --ms-working: oklch(68.1% 0.162 75.834); --ms-track: color-mix(in oklch, var(--orca-foreground) 12%, transparent); }
-html.dark { --ms-done: oklch(87.1% 0.15 154.449); --ms-todo: oklch(70.5% 0.213 47.604);
+html.dark { --ms-done: oklch(69.6% 0.17 162.48); --ms-todo: oklch(70.5% 0.213 47.604);
   --ms-working: oklch(79.5% 0.184 86.047); --ms-track: color-mix(in oklch, var(--orca-foreground) 16%, transparent); }
 body { margin: 0; padding: 12px; font: 13px/1.5 system-ui, sans-serif;
   color: var(--orca-foreground); background: var(--orca-background); }
@@ -52,6 +52,7 @@ li { display: flex; gap: 8px; padding: 2px 0; }
 li .mark { flex: none; width: 1em; text-align: center; font-weight: 700; color: var(--ms-todo); }
 li.completed { color: var(--orca-muted-foreground); }
 li.completed .mark { color: var(--ms-done); }
+li.pending .mark { color: var(--orca-muted-foreground); }
 li.completed .subject { text-decoration: line-through; }
 li.in_progress { font-weight: 600; }
 .empty { color: var(--orca-muted-foreground); }
