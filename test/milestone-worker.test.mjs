@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile, rm } from 'node:fs/promises'
+import { appendFile, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createMilestoneWorker } from '../src/milestone-worker.mjs'
@@ -86,6 +86,43 @@ test('a team lead\'s list, named session-<id prefix>, shows under its workspace'
   const html = await readFile(panelPath, 'utf8')
   assert.ok(html.includes('Team goal'))
   assert.ok(html.includes('1 / 2'))
+})
+
+test('the heading follows the goal of the current tasks, not the first prompt of the session', async () => {
+  const home = await makeHome()
+  const panelPath = join(home, 'panel', 'index.html')
+  await writeTranscript(home, SESSION_A, { cwd: '/work/app', prompt: 'First goal' })
+  const transcript = join(home, '.claude', 'projects', '-work-app', `${SESSION_A}.jsonl`)
+  await appendFile(
+    transcript,
+    [
+      { type: 'user', cwd: '/work/app', message: { role: 'user', content: 'Second goal' } },
+      { type: 'assistant', cwd: '/work/app', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'TaskCreate', input: { subject: 'Step two' } }] } }
+    ].map((line) => JSON.stringify(line)).join('\n') + '\n'
+  )
+  await writeTasks(home, SESSION_A, [task(1, 'Step two', 'pending')])
+  const worker = createMilestoneWorker({
+    orca: fakeOrca(),
+    home,
+    panelPath,
+    cli: 'orca',
+    readActive: async () => ({ path: '/work/app', displayName: 'app', claudeStates: [] }),
+    watchDir: () => {}
+  })
+  await worker.refresh(true)
+  let html = await readFile(panelPath, 'utf8')
+  assert.ok(html.includes('Second goal'))
+  assert.ok(!html.includes('First goal'))
+
+  await writeTasks(home, SESSION_A, [
+    task(1, 'Step two', 'completed'),
+    task(2, 'Step three', 'pending', { metadata: { goal: 'Goal Claude wrote' } })
+  ])
+  await worker.refresh()
+  html = await readFile(panelPath, 'utf8')
+  assert.ok(html.includes('Goal Claude wrote'))
+  assert.ok(html.includes('0 / 1'), 'tasks of the earlier goal are left out')
+  assert.ok(!html.includes('Step two'))
 })
 
 test('a failing CLI leaves the panel showing that no workspace is known', async () => {
