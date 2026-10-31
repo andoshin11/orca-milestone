@@ -27,6 +27,9 @@ const FOCUS_POLL_MS = 1000
 const AGENTS_POLL_MS = 3000
 const DEBOUNCE_MS = 150
 const REQUEST_RETRY_MS = 30_000
+// Orca replaces the panel's frame on every rewrite, which blanks it for a moment, so rewrites
+// are spaced out. Moving to another workspace still shows at once.
+const WRITE_INTERVAL_MS = 5000
 
 export function createMilestoneWorker({
   orca,
@@ -35,6 +38,7 @@ export function createMilestoneWorker({
   cli,
   readOrca = readWorkspaces,
   now = Date.now,
+  writeIntervalMs = WRITE_INTERVAL_MS,
   watchDir = (dir, onChange) => watch(dir, { recursive: true }, onChange)
 }) {
   const paths = claudePaths(home)
@@ -50,6 +54,9 @@ export function createMilestoneWorker({
   let agents = []
   let focusKey
   let lastHtml = null
+  let lastWriteAt = -Infinity
+  let lastPath
+  let writeTimer = null
   let started = null
   let timer = null
   let pendingFocus = false
@@ -108,13 +115,23 @@ export function createMilestoneWorker({
     return previous.every((task) => task.status === 'completed') ? previous : []
   }
 
-  async function writePanel(html) {
+  async function writePanel(html, path) {
+    clearTimeout(writeTimer)
     if (html === lastHtml) return
+    const wait = lastWriteAt + writeIntervalMs - now()
+    if (path === lastPath && wait > 0) {
+      // A refresh at the end of the interval writes whatever is newest by then.
+      writeTimer = setTimeout(() => void refresh(), wait)
+      writeTimer.unref?.()
+      return
+    }
     await mkdir(dirname(panelPath), { recursive: true })
     const temporary = `${panelPath}.tmp`
     await writeFile(temporary, html)
     await rename(temporary, panelPath)
     lastHtml = html
+    lastWriteAt = now()
+    lastPath = path
   }
 
   async function refreshOnce(askOrca) {
@@ -126,7 +143,7 @@ export function createMilestoneWorker({
       }
     }
     const sessions = await allSessions()
-    await writePanel(renderPanel(buildModel(workspace, sessions, agents)))
+    await writePanel(renderPanel(buildModel(workspace, sessions, agents)), workspace?.path ?? null)
   }
 
   /** Runs refreshes one at a time; a request during a run starts one more afterwards. */

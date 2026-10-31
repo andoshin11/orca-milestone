@@ -52,31 +52,34 @@ test('renderPanel escapes text, shows progress and is deterministic', () => {
   assert.equal(renderPanel(model), html)
 })
 
-test('other workspaces list those needing the user first, with progress, and leave out the rest', () => {
+test('other workspaces list those needing the user first, then unfinished tasks, with progress', () => {
   const agent = (name, state, since, extra = {}) => ({ workspace: name, path: `/work/${name}`, focused: false, state, since, ...extra })
-  const lists = [
-    { listId: 'q', cwd: '/work/question/pkg', goal: 'Q', tasks: [task(1, 'x', 'completed'), task(2, 'y', 'pending')] },
-    { listId: 'p', cwd: '/work/paused', goal: 'P', tasks: [task(1, 'x', 'pending')] },
-    { listId: 'f', cwd: '/work/finished', goal: 'F', tasks: [task(1, 'x', 'completed')] }
-  ]
+  const list = (name, done, total, updatedAt) => ({
+    listId: name,
+    cwd: `/work/${name}/pkg`,
+    goal: `Goal ${name}`,
+    updatedAt,
+    tasks: Array.from({ length: total }, (_, i) => task(i + 1, `t${i}`, i < done ? 'completed' : 'pending'))
+  })
+  const lists = [list('question', 1, 2, 50), list('older', 0, 1, 10), list('newer', 2, 3, 40), list('finished', 1, 1, 60)]
   const model = buildModel(workspace, lists, [
-    agent('busy', 'working', 3),
     agent('question', 'waiting', 1),
     agent('question', 'working', 2),
     agent('allow', 'blocked', 5),
-    agent('paused', 'done', 9),
+    agent('older', 'done', 9),
+    agent('newer', 'working', 8),
     agent('finished', 'done', 8),
-    agent('idle', 'done', 7),
+    agent('busy', 'working', 7),
     agent('app', 'waiting', 6, { focused: true })
   ])
   assert.equal(model.others.attention, 3)
   assert.deepEqual(
     model.others.rows.map((row) => [row.workspace, row.kind, row.done, row.total]),
     [
-      ['allow', 'attention', 0, 0],
       ['question', 'attention', 1, 2],
-      ['busy', 'working', 0, 0],
-      ['paused', 'idle', 0, 1]
+      ['allow', 'attention', 0, 0],
+      ['newer', 'idle', 2, 3],
+      ['older', 'idle', 0, 1]
     ]
   )
 
@@ -84,11 +87,11 @@ test('other workspaces list those needing the user first, with progress, and lea
   assert.ok(html.includes('ほかのワークスペース'))
   assert.ok(html.includes('要確認 3'))
   assert.equal(html.match(/class="badge"/g).length, 2)
-  assert.ok(html.includes('width:50%'))
-  assert.ok(!html.includes('finished'))
+  assert.ok(html.includes('width:67%'))
+  assert.ok(!html.includes('finished') && !html.includes('busy'))
   // Rows with tasks open on a click to their goal and tasks; rows without stay plain.
-  assert.equal(html.match(/<details>/g).length, 2)
-  assert.ok(html.includes('<p class="goal">Q</p>'))
+  assert.equal(html.match(/<details>/g).length, 3)
+  assert.ok(html.includes('<p class="goal">Goal question</p>'))
   assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
   assert.equal(renderPanel(model), html)
 })

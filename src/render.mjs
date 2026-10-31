@@ -73,7 +73,6 @@ code { font-size: 12px; }
 .row .detail .goal { margin: 0 0 4px; }
 .row .top { display: flex; align-items: center; gap: 6px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
-.row.working .dot { background: none; border: 2px solid var(--ms-working); }
 .row.attention .dot { background: var(--ms-todo); }
 .row .name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .badge { flex: none; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 16px;

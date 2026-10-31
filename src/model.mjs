@@ -17,15 +17,18 @@ function progress(tasks) {
 const NEEDS_USER = new Set(['waiting', 'blocked', 'permission'])
 
 /**
- * The other workspaces where Claude needs the user, is at work, or has unfinished tasks, each
- * with the progress of its newest task list. The focused workspace is shown in full above.
+ * The other workspaces where Claude needs the user or has unfinished tasks, each with the
+ * progress of its newest task list. The focused workspace is shown in full above. Whether Claude
+ * is at work flips every turn, so it is left out: each change would rebuild the panel.
  */
 function buildOthers(agents, sessions) {
   const byWorkspace = new Map()
   for (const agent of agents) {
-    const entry = byWorkspace.get(agent.path) ?? { ...agent, states: [] }
-    entry.states.push(agent.state)
-    entry.since = Math.max(entry.since ?? 0, agent.since ?? 0)
+    const entry = byWorkspace.get(agent.path) ?? { ...agent, needsUser: false, since: 0 }
+    if (NEEDS_USER.has(agent.state)) {
+      entry.needsUser = true
+      entry.since = Math.max(entry.since, agent.since ?? 0)
+    }
     byWorkspace.set(agent.path, entry)
   }
   const rows = [...byWorkspace.values()].map((entry) => {
@@ -34,23 +37,23 @@ function buildOthers(agents, sessions) {
     return {
       workspace: entry.workspace,
       focused: entry.focused,
-      kind: entry.states.some((state) => NEEDS_USER.has(state))
-        ? 'attention'
-        : entry.states.includes('working')
-          ? 'working'
-          : 'idle',
+      kind: entry.needsUser ? 'attention' : 'idle',
       since: entry.since,
+      updatedAt: session?.updatedAt ?? 0,
       goal: session?.goal ?? null,
       ...counts
     }
   })
-  const rank = { attention: 0, working: 1, idle: 2 }
   return {
     attention: rows.filter((row) => row.kind === 'attention').length,
-    working: rows.filter((row) => row.kind === 'working').length,
+    // Those needing the user first, longest waiting first; then the most recently updated tasks.
     rows: rows
-      .filter((row) => !row.focused && (row.kind !== 'idle' || row.done < row.total))
-      .sort((a, b) => rank[a.kind] - rank[b.kind] || b.since - a.since)
+      .filter((row) => !row.focused && (row.kind === 'attention' || row.done < row.total))
+      .sort(
+        (a, b) =>
+          (a.kind === 'attention' ? 0 : 1) - (b.kind === 'attention' ? 0 : 1) ||
+          (a.kind === 'attention' ? a.since - b.since : b.updatedAt - a.updatedAt)
+      )
       .slice(0, MAX_ROWS)
   }
 }
