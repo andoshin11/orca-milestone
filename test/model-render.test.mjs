@@ -90,6 +90,9 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.equal(html.match(/class="badge"/g).length, 2)
   assert.ok(html.includes('width:67%'))
   assert.ok(!html.includes('busy'))
+  // Only the finished row gets a check; the others keep a dot.
+  assert.equal(html.match(/<span class="check">✓<\/span><span class="name">finished/g).length, 1)
+  assert.equal(html.match(/class="check"/g).length, 1)
   assert.ok(html.includes('<span class="name">question<span class="repo">repo-x</span></span>'))
   // Rows with tasks show their goal and tasks on hover; rows without have none.
   assert.equal(html.match(/<div class="detail">/g).length, 4)
