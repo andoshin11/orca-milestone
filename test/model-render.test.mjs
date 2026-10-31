@@ -93,6 +93,7 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.ok(html.includes('<span class="name">question<span class="repo">repo-x</span></span>'))
   // Rows with tasks show their goal and tasks on hover; rows without have none.
   assert.equal(html.match(/<div class="detail">/g).length, 4)
+  assert.ok(html.includes('<div class="detail"><div class="title"><b>question</b><span class="repo">repo-x</span><span class="of">1 / 2</span></div>'))
   assert.ok(html.includes('<p class="goal">Goal question</p>'))
   assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
   assert.equal(renderPanel(model), html)

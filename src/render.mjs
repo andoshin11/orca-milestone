@@ -65,6 +65,7 @@ code { font-size: 12px; }
 .rows { margin: 0; padding: 0; list-style: none; }
 .row { display: block; position: relative; padding: 0; }
 .row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; }
+.row.has-detail .head { cursor: pointer; }
 .row.has-detail:hover .head { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
 /* The detail floats above its row, over the empty middle of the panel, so nothing moves. */
 .row .detail { display: none; position: absolute; left: -6px; right: -6px; bottom: 100%; z-index: 1;
@@ -73,6 +74,11 @@ code { font-size: 12px; }
   background: var(--orca-card); color: var(--orca-card-foreground); box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); }
 .row:hover .detail { display: block; }
 .row .detail .goal { margin: 0 0 4px; }
+.row .detail .title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--orca-border); }
+.row .detail .title b { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.row .detail .title .repo { margin-left: 0; }
+.row .detail .title .of { flex: none; }
 .row .top { display: flex; align-items: center; gap: 6px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
 .row.attention .dot { background: var(--ms-todo); }
@@ -110,8 +116,9 @@ function renderRow(row) {
   if (row.total === 0) return `<li class="row ${row.kind}"><div class="head">${head}</div></li>`
   // Hovering a row shows its goal and tasks; plain CSS, so it needs no script.
   const goal = row.goal ? `<p class="goal">${escape(clip(row.goal, GOAL_MAX))}</p>` : ''
+  const title = `<div class="title"><b>${escape(row.workspace)}</b>${repo}<span class="of">${row.done} / ${row.total}</span></div>`
   return `<li class="row ${row.kind} has-detail"><div class="head">${head}</div>
-<div class="detail">${goal}<ol>${row.tasks.map(renderTask).join('')}</ol></div></li>`
+<div class="detail">${title}${goal}<ol>${row.tasks.map(renderTask).join('')}</ol></div></li>`
 }
 
 function renderOthers(others) {
