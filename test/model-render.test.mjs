@@ -53,7 +53,7 @@ test('renderPanel escapes text, shows progress and is deterministic', () => {
 })
 
 test('other workspaces list those needing the user first, then unfinished and finished lists', () => {
-  const agent = (name, state, since, extra = {}) => ({ workspace: name, path: `/work/${name}`, focused: false, state, since, ...extra })
+  const agent = (name, state, since, extra = {}) => ({ workspace: name, repo: 'repo-x', path: `/work/${name}`, focused: false, state, since, ...extra })
   const list = (name, done, total, updatedAt) => ({
     listId: name,
     cwd: `/work/${name}/pkg`,
@@ -90,6 +90,7 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.equal(html.match(/class="badge"/g).length, 2)
   assert.ok(html.includes('width:67%'))
   assert.ok(!html.includes('busy'))
+  assert.ok(html.includes('<span class="name">question<span class="repo">repo-x</span></span>'))
   // Rows with tasks open on a click to their goal and tasks; rows without stay plain.
   assert.equal(html.match(/<details>/g).length, 4)
   assert.ok(html.includes('<p class="goal">Goal question</p>'))

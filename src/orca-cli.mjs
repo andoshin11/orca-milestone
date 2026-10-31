@@ -54,6 +54,7 @@ export async function readWorkspaces(cli) {
     agents: worktrees.flatMap((worktree) =>
       claudeAgents(worktree).map((agent) => ({
         workspace: worktree.displayName,
+        repo: typeof worktree.repo === 'string' ? worktree.repo : null,
         path: worktree.path,
         focused: Boolean(worktree.isActive),
         state: agent.state,

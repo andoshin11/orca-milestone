@@ -75,6 +75,7 @@ code { font-size: 12px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
 .row.attention .dot { background: var(--ms-todo); }
 .row .name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .repo { margin-left: 6px; font-size: 11px; color: var(--orca-muted-foreground); }
 .row .badge { flex: none; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 16px;
   color: var(--ms-todo); background: color-mix(in oklch, var(--ms-todo) 18%, transparent); }
 .row .of { flex: none; font-size: 11px; color: var(--ms-done); }
@@ -102,7 +103,8 @@ function renderRow(row) {
   const badge = row.kind === 'attention' ? '<span class="badge">要確認</span>' : ''
   const of = row.total > 0 ? `<span class="of">${row.done} / ${row.total}</span>` : ''
   const bar = row.total > 0 ? `<div class="bar"><div style="width:${percent}%"></div></div>` : ''
-  const head = `<div class="top"><span class="dot"></span><span class="name">${escape(row.workspace)}</span>${badge}${of}</div>${bar}`
+  const repo = row.repo ? `<span class="repo">${escape(row.repo)}</span>` : ''
+  const head = `<div class="top"><span class="dot"></span><span class="name">${escape(row.workspace)}${repo}</span>${badge}${of}</div>${bar}`
   if (row.total === 0) return `<li class="row ${row.kind}"><div class="head">${head}</div></li>`
   // A click opens the goal and the tasks. No script: the panel is rebuilt whenever its content
   // changes, which closes the row again.
