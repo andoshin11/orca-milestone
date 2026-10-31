@@ -83,6 +83,7 @@ code { font-size: 12px; }
 .row .top { display: flex; align-items: center; gap: 6px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
 .row.attention .dot { background: var(--ms-todo); }
+.row .check { flex: none; width: 8px; font-size: 11px; font-weight: 700; line-height: 1; text-align: center; color: var(--ms-done); }
 .row .name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .repo { margin-left: 6px; font-size: 11px; color: var(--orca-muted-foreground); }
 .row .badge { flex: none; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 16px;
@@ -113,7 +114,10 @@ function renderRow(row) {
   const of = row.total > 0 ? `<span class="of">${row.done} / ${row.total}</span>` : ''
   const bar = row.total > 0 ? `<div class="bar"><div style="width:${percent}%"></div></div>` : ''
   const repo = row.repo ? `<span class="repo">${escape(row.repo)}</span>` : ''
-  const head = `<div class="top"><span class="dot"></span><span class="name">${escape(row.workspace)}${repo}</span>${badge}${of}</div>${bar}`
+  // Every task done, nothing asked of the user: a check instead of the dot.
+  const finished = row.kind !== 'attention' && row.total > 0 && row.done === row.total
+  const mark = finished ? '<span class="check">✓</span>' : '<span class="dot"></span>'
+  const head = `<div class="top">${mark}<span class="name">${escape(row.workspace)}${repo}</span>${badge}${of}</div>${bar}`
   if (row.total === 0) return `<li class="row ${row.kind}"><div class="head">${head}</div></li>`
   // Hovering a row shows its goal and tasks; plain CSS, so it needs no script.
   const goal = row.goal ? `<p class="goal">${escape(clip(row.goal, GOAL_MAX))}</p>` : ''
