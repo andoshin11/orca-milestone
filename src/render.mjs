@@ -23,27 +23,37 @@ const AGENT_LABELS = {
   none: ''
 }
 
+// Panels only get Orca's neutral tokens, so the status hues are Orca's own Tailwind v4 values
+// copied from its main.css: orange is --agent-question (unfinished tasks, waiting), yellow is
+// --agent-working. Progress is a light green that stands out on a dark sidebar. Orca puts `dark`
+// or `light` on the panel's <html>, which picks the shade for each theme.
 const STYLE = `
-:root { color-scheme: light dark; }
+:root { color-scheme: light dark;
+  --ms-done: oklch(62.7% 0.194 149.214); --ms-todo: oklch(64.6% 0.222 41.116);
+  --ms-working: oklch(68.1% 0.162 75.834); --ms-track: color-mix(in oklch, var(--orca-foreground) 12%, transparent); }
+html.dark { --ms-done: oklch(87.1% 0.15 154.449); --ms-todo: oklch(70.5% 0.213 47.604);
+  --ms-working: oklch(79.5% 0.184 86.047); --ms-track: color-mix(in oklch, var(--orca-foreground) 16%, transparent); }
 body { margin: 0; padding: 12px; font: 13px/1.5 system-ui, sans-serif;
   color: var(--orca-foreground); background: var(--orca-background); }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 h1 { margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent { flex: none; font-size: 11px; color: var(--orca-muted-foreground); }
-.agent.working { color: var(--orca-primary); }
+.agent { flex: none; font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
+.agent.working { color: var(--ms-working); }
+.agent.waiting { color: var(--ms-todo); }
 section { padding: 10px; margin-bottom: 10px; border: 1px solid var(--orca-border);
   border-radius: var(--orca-radius, 6px); background: var(--orca-card); color: var(--orca-card-foreground); }
 .goal { margin: 0 0 8px; font-weight: 600; }
-.count { display: flex; justify-content: space-between; font-size: 11px; color: var(--orca-muted-foreground); }
-.bar { height: 4px; margin: 4px 0 10px; border-radius: 2px; background: var(--orca-muted); overflow: hidden; }
-.bar > div { height: 100%; background: var(--orca-primary); }
+.count { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--orca-muted-foreground); }
+.count strong { font-size: 12px; color: var(--ms-done); }
+.bar { height: 6px; margin: 4px 0 10px; border-radius: 3px; background: var(--ms-track); overflow: hidden; }
+.bar > div { height: 100%; border-radius: 3px; background: var(--ms-done); }
 ol { margin: 0; padding: 0; list-style: none; }
 li { display: flex; gap: 8px; padding: 2px 0; }
-li .mark { flex: none; width: 1em; text-align: center; }
+li .mark { flex: none; width: 1em; text-align: center; font-weight: 700; color: var(--ms-todo); }
 li.completed { color: var(--orca-muted-foreground); }
+li.completed .mark { color: var(--ms-done); }
 li.completed .subject { text-decoration: line-through; }
 li.in_progress { font-weight: 600; }
-li.in_progress .mark { color: var(--orca-primary); }
 .empty { color: var(--orca-muted-foreground); }
 code { font-size: 12px; }
 `
@@ -59,7 +69,7 @@ function renderTask(task) {
 function renderSession(session) {
   const percent = session.total === 0 ? 0 : Math.round((session.done / session.total) * 100)
   const goal = session.goal ? `<p class="goal">${escape(clip(session.goal, GOAL_MAX))}</p>` : ''
-  return `<section>${goal}<div class="count"><span>マイルストーン</span><span>${session.done} / ${session.total}</span></div>
+  return `<section>${goal}<div class="count"><span>マイルストーン</span><strong>${session.done} / ${session.total}</strong></div>
 <div class="bar"><div style="width:${percent}%"></div></div>
 <ol>${session.tasks.map(renderTask).join('')}</ol></section>`
 }
