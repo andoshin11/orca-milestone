@@ -56,10 +56,8 @@ export async function readWorkspaces(cli) {
         workspace: worktree.displayName,
         path: worktree.path,
         focused: Boolean(worktree.isActive),
-        unread: Boolean(worktree.unread),
         state: agent.state,
-        since: agent.stateStartedAt ?? null,
-        title: typeof agent.taskTitle === 'string' ? agent.taskTitle : null
+        since: agent.stateStartedAt ?? null
       }))
     )
   }

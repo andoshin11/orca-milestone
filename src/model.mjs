@@ -2,9 +2,6 @@
 
 const MAX_SESSIONS = 3
 const MAX_ROWS = 8
-const MINUTE = 60_000
-const HOUR = 60 * MINUTE
-const DAY = 24 * HOUR
 
 export function isInside(path, root) {
   return path === root || path.startsWith(root.endsWith('/') ? root : `${root}/`)
@@ -16,60 +13,56 @@ function progress(tasks) {
   return { done, total: visible.length, tasks: visible }
 }
 
-// Why an agent needs the user: it asks for input or a permission, or it finished a turn the user
-// has not looked at yet (Orca marks that workspace unread).
-const ATTENTION = { waiting: 'input', blocked: 'permission', permission: 'permission' }
-
-/** How long ago, coarse enough that the panel is not rebuilt every few seconds. */
-function age(since, now) {
-  if (!since) return null
-  const elapsed = Math.max(0, now - since)
-  if (elapsed < MINUTE) return { unit: 'now', value: 0 }
-  if (elapsed < HOUR) return { unit: 'minutes', value: Math.floor(elapsed / MINUTE) }
-  if (elapsed < DAY) return { unit: 'hours', value: Math.floor(elapsed / HOUR) }
-  return { unit: 'days', value: Math.floor(elapsed / DAY) }
-}
+// An agent needs the user when it asks for input or for a permission.
+const NEEDS_USER = new Set(['waiting', 'blocked', 'permission'])
 
 /**
- * Every Claude agent Orca runs on this machine, sorted into those that need the user and those
- * at work. Each row carries the goal and progress of the newest task list under its workspace.
+ * The other workspaces where Claude needs the user, is at work, or has unfinished tasks, each
+ * with the progress of its newest task list. The focused workspace is shown in full above.
  */
-function buildMachine(agents, sessions, now) {
-  const rows = agents.map((agent) => {
-    const session = sessions.find((s) => s.cwd && s.tasks.length > 0 && isInside(s.cwd, agent.path))
-    const reason = ATTENTION[agent.state] ?? (agent.state === 'done' && agent.unread ? 'review' : null)
+function buildOthers(agents, sessions) {
+  const byWorkspace = new Map()
+  for (const agent of agents) {
+    const entry = byWorkspace.get(agent.path) ?? { ...agent, states: [] }
+    entry.states.push(agent.state)
+    entry.since = Math.max(entry.since ?? 0, agent.since ?? 0)
+    byWorkspace.set(agent.path, entry)
+  }
+  const rows = [...byWorkspace.values()].map((entry) => {
+    const session = sessions.find((s) => s.cwd && s.tasks.length > 0 && isInside(s.cwd, entry.path))
+    const counts = session ? progress(session.tasks) : { done: 0, total: 0 }
     return {
-      workspace: agent.workspace,
-      focused: agent.focused,
-      kind: reason ? 'attention' : agent.state === 'working' ? 'working' : 'idle',
-      reason,
-      since: agent.since ?? 0,
-      age: age(agent.since, now),
-      goal: session?.goal ?? agent.title ?? null,
-      ...(session ? progress(session.tasks) : { done: 0, total: 0 })
+      workspace: entry.workspace,
+      focused: entry.focused,
+      kind: entry.states.some((state) => NEEDS_USER.has(state))
+        ? 'attention'
+        : entry.states.includes('working')
+          ? 'working'
+          : 'idle',
+      since: entry.since,
+      done: counts.done,
+      total: counts.total
     }
   })
-  const count = (kind) => rows.filter((row) => row.kind === kind).length
-  // The focused workspace is already shown in full above; it only counts here.
-  const listed = (kind, order) =>
-    rows.filter((row) => row.kind === kind && !row.focused).sort(order).slice(0, MAX_ROWS)
+  const rank = { attention: 0, working: 1, idle: 2 }
   return {
-    counts: { attention: count('attention'), working: count('working'), idle: count('idle') },
-    // Waiting longest first; most recently started work first.
-    attention: listed('attention', (a, b) => a.since - b.since),
-    working: listed('working', (a, b) => b.since - a.since)
+    attention: rows.filter((row) => row.kind === 'attention').length,
+    working: rows.filter((row) => row.kind === 'working').length,
+    rows: rows
+      .filter((row) => !row.focused && (row.kind !== 'idle' || row.done < row.total))
+      .sort((a, b) => rank[a.kind] - rank[b.kind] || b.since - a.since)
+      .slice(0, MAX_ROWS)
   }
 }
 
 /**
  * @param workspace { path, displayName, claudeStates } of the focused workspace, or null
  * @param sessions  [{ listId, cwd, goal, tasks, updatedAt }] of every workspace, newest first
- * @param agents    [{ workspace, path, focused, unread, state, since, title }] Orca runs
- * @param now       the time ages are measured to
+ * @param agents    [{ workspace, path, focused, state, since }] Orca runs, one per Claude agent
  */
-export function buildModel(workspace, sessions, agents = [], now = Date.now()) {
-  const machine = buildMachine(agents, sessions, now)
-  if (!workspace) return { kind: 'no-workspace', machine }
+export function buildModel(workspace, sessions, agents = []) {
+  const others = buildOthers(agents, sessions)
+  if (!workspace) return { kind: 'no-workspace', others }
   const mine = sessions
     .filter((session) => session.cwd && isInside(session.cwd, workspace.path))
     .filter((session) => session.tasks.length > 0)
@@ -87,6 +80,6 @@ export function buildModel(workspace, sessions, agents = [], now = Date.now()) {
           ? 'idle'
           : 'none',
     sessions: mine,
-    machine
+    others
   }
 }
