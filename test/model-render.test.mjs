@@ -52,44 +52,39 @@ test('renderPanel escapes text, shows progress and is deterministic', () => {
   assert.equal(renderPanel(model), html)
 })
 
-test('the machine summary sorts agents into needing the user and at work, with their progress', () => {
-  const now = 10 * 60 * 60 * 1000
-  const agent = (workspace, state, minutesAgo, extra = {}) => ({
-    workspace,
-    path: `/work/${workspace}`,
-    focused: false,
-    unread: false,
-    state,
-    since: now - minutesAgo * 60_000,
-    title: null,
-    ...extra
-  })
-  const model = buildModel(
-    workspace,
-    [{ listId: 'q', cwd: '/work/question/pkg', goal: 'Answer the question', tasks: [task(1, 'x', 'completed'), task(2, 'y', 'pending')] }],
-    [
-      agent('question', 'waiting', 12),
-      agent('allow', 'blocked', 30),
-      agent('finished', 'done', 3, { unread: true }),
-      agent('seen', 'done', 90),
-      agent('busy', 'working', 0.5, { title: 'Orca title' }),
-      agent('app', 'waiting', 5, { focused: true })
-    ],
-    now
-  )
-  assert.deepEqual(model.machine.counts, { attention: 4, working: 1, idle: 1 })
+test('other workspaces list those needing the user first, with progress, and leave out the rest', () => {
+  const agent = (name, state, since, extra = {}) => ({ workspace: name, path: `/work/${name}`, focused: false, state, since, ...extra })
+  const lists = [
+    { listId: 'q', cwd: '/work/question/pkg', goal: 'Q', tasks: [task(1, 'x', 'completed'), task(2, 'y', 'pending')] },
+    { listId: 'p', cwd: '/work/paused', goal: 'P', tasks: [task(1, 'x', 'pending')] },
+    { listId: 'f', cwd: '/work/finished', goal: 'F', tasks: [task(1, 'x', 'completed')] }
+  ]
+  const model = buildModel(workspace, lists, [
+    agent('busy', 'working', 3),
+    agent('question', 'waiting', 1),
+    agent('question', 'working', 2),
+    agent('allow', 'blocked', 5),
+    agent('paused', 'done', 9),
+    agent('finished', 'done', 8),
+    agent('idle', 'done', 7),
+    agent('app', 'waiting', 6, { focused: true })
+  ])
+  assert.equal(model.others.attention, 3)
   assert.deepEqual(
-    model.machine.attention.map((row) => [row.workspace, row.reason]),
-    [['allow', 'permission'], ['question', 'input'], ['finished', 'review']]
+    model.others.rows.map((row) => [row.workspace, row.kind, row.done, row.total]),
+    [
+      ['allow', 'attention', 0, 0],
+      ['question', 'attention', 1, 2],
+      ['busy', 'working', 0, 0],
+      ['paused', 'idle', 0, 1]
+    ]
   )
-  const question = model.machine.attention[1]
-  assert.deepEqual([question.goal, question.done, question.total, question.age], ['Answer the question', 1, 2, { unit: 'minutes', value: 12 }])
-  assert.equal(model.machine.working[0].goal, 'Orca title')
 
   const html = renderPanel(model)
-  assert.ok(html.includes('このマシンの Claude'))
-  assert.ok(html.includes('入力待ち 12分'))
-  assert.ok(html.includes('未確認 3分'))
-  assert.ok(html.includes('Orca title'))
+  assert.ok(html.includes('ほかのワークスペース'))
+  assert.ok(html.includes('要確認 3'))
+  assert.equal(html.match(/class="badge"/g).length, 2)
+  assert.ok(html.includes('width:50%'))
+  assert.ok(!html.includes('finished'))
   assert.equal(renderPanel(model), html)
 })

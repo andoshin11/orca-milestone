@@ -126,7 +126,7 @@ export function createMilestoneWorker({
       }
     }
     const sessions = await allSessions()
-    await writePanel(renderPanel(buildModel(workspace, sessions, agents, now())))
+    await writePanel(renderPanel(buildModel(workspace, sessions, agents)))
   }
 
   /** Runs refreshes one at a time; a request during a run starts one more afterwards. */
