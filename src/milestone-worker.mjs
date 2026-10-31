@@ -9,7 +9,7 @@ import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import {
   claudePaths,
-  findTranscript,
+  findListTranscript,
   listRecentTaskLists,
   readTaskList,
   readTranscriptHead
@@ -30,11 +30,12 @@ export function createMilestoneWorker({
   readActive = readActiveWorkspace,
   watchDir = (dir, onChange) => watch(dir, { recursive: true }, onChange)
 }) {
-  const { tasksRoot, projectsRoot } = claudePaths(home)
+  const paths = claudePaths(home)
+  const { tasksRoot } = paths
   // Transcript heads never change once written; null entries are retried on the next refresh.
   const heads = new Map()
   // Claude deletes a list's task files once every task is completed. The last tasks seen per
-  // session keep a finished goal on screen as done instead of letting it vanish.
+  // list keep a finished goal on screen as done instead of letting it vanish.
   const lastTasks = new Map()
   let workspace = null
   let focusKey
@@ -45,11 +46,11 @@ export function createMilestoneWorker({
   let running = null
   let rerun = false
 
-  async function headOf(sessionId) {
-    if (heads.has(sessionId)) return heads.get(sessionId)
-    const transcript = await findTranscript(projectsRoot, sessionId)
+  async function headOf(listId) {
+    if (heads.has(listId)) return heads.get(listId)
+    const transcript = await findListTranscript(paths, listId)
     const head = transcript ? await readTranscriptHead(transcript).catch(() => null) : null
-    if (head) heads.set(sessionId, head)
+    if (head) heads.set(listId, head)
     return head
   }
 
@@ -57,19 +58,22 @@ export function createMilestoneWorker({
     const lists = await listRecentTaskLists(tasksRoot, { maxAgeMs: TASK_LIST_MAX_AGE_MS })
     const sessions = []
     for (const list of lists) {
-      const head = await headOf(list.sessionId)
+      const tasks = currentTasks(list.listId, await readTaskList(list.dir))
+      // A team creates its list when it starts, and most stay empty; they are not looked up.
+      if (tasks.length === 0) continue
+      const head = await headOf(list.listId)
       if (!head?.cwd || !isInside(head.cwd, root)) continue
-      sessions.push({ ...list, ...head, tasks: currentTasks(list.sessionId, await readTaskList(list.dir)) })
+      sessions.push({ ...list, ...head, tasks })
     }
     return sessions
   }
 
-  function currentTasks(sessionId, tasks) {
+  function currentTasks(listId, tasks) {
     if (tasks.length > 0) {
-      lastTasks.set(sessionId, tasks)
+      lastTasks.set(listId, tasks)
       return tasks
     }
-    const previous = lastTasks.get(sessionId) ?? []
+    const previous = lastTasks.get(listId) ?? []
     // A list emptied before it was finished was cleared on purpose; show nothing for it.
     return previous.every((task) => task.status === 'completed') ? previous : []
   }

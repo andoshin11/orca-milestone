@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { mkdir, utimes } from 'node:fs/promises'
+import { mkdir, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
   claudePaths,
+  findListTranscript,
   findTranscript,
   listRecentTaskLists,
   readTaskList,
@@ -25,16 +26,31 @@ test('readTaskList orders tasks by numeric id and skips other files', async () =
   assert.deepEqual(await readTaskList(join(home, 'missing')), [])
 })
 
-test('listRecentTaskLists keeps session-id lists changed within the window, newest first', async () => {
+test('listRecentTaskLists keeps session and team lists changed within the window, newest first', async () => {
   const home = await makeHome()
   const { tasksRoot } = claudePaths(home)
   const now = Date.now()
   await utimes(await writeTasks(home, SESSION_A, [task(1, 'A', 'pending')]), now / 1000, (now - 5000) / 1000)
   await utimes(await writeTasks(home, SESSION_B, [task(1, 'B', 'pending')]), now / 1000, (now - 1000) / 1000)
-  await mkdir(join(tasksRoot, 'session-1234abcd'), { recursive: true })
+  await utimes(await writeTasks(home, 'session-1234abcd', []), now / 1000, (now - 3000) / 1000)
+  await mkdir(join(tasksRoot, 'not-a-list'), { recursive: true })
   const lists = await listRecentTaskLists(tasksRoot, { now, maxAgeMs: 60_000 })
-  assert.deepEqual(lists.map((list) => list.sessionId), [SESSION_B, SESSION_A])
-  assert.deepEqual(await listRecentTaskLists(tasksRoot, { now, maxAgeMs: 2000 }).then((l) => l.map((x) => x.sessionId)), [SESSION_B])
+  assert.deepEqual(lists.map((list) => list.listId), [SESSION_B, 'session-1234abcd', SESSION_A])
+  assert.deepEqual(await listRecentTaskLists(tasksRoot, { now, maxAgeMs: 2000 }).then((l) => l.map((x) => x.listId)), [SESSION_B])
+})
+
+test('findListTranscript finds a team lead by the team config, or by the id prefix once it is gone', async () => {
+  const home = await makeHome()
+  const paths = claudePaths(home)
+  await writeTranscript(home, SESSION_A, { cwd: '/work/app', prompt: 'Lead the team' })
+  const teamDir = join(paths.teamsRoot, 'session-11111111')
+  await mkdir(teamDir, { recursive: true })
+  await writeFile(join(teamDir, 'config.json'), JSON.stringify({ leadSessionId: SESSION_A }))
+  const expected = await findTranscript(paths.projectsRoot, SESSION_A)
+  assert.equal(await findListTranscript(paths, 'session-11111111'), expected)
+  assert.equal(await findListTranscript(paths, SESSION_A), expected)
+  assert.equal(await findListTranscript({ ...paths, teamsRoot: join(home, 'no-teams') }, 'session-11111111'), expected)
+  assert.equal(await findListTranscript(paths, 'session-22222222'), null)
 })
 
 test('readTranscriptHead finds the cwd, branch and first real prompt', async () => {

@@ -13,7 +13,7 @@
   - タスクの一覧（✓ 完了・● 進行中・○ 未着手）
 - ワークスペースを切り替えると、表示もそのワークスペースのものに変わります。
 - Claude はすべてのタスクを完了するとタスク一覧を消しますが、この plugin は完了した状態のまま表示を残します（plugin を再起動するまで）。
-- 対象は Claude Code だけです。
+- 対象は Claude Code だけです。Orca の Agent Teams で起動した Claude（`claude --teammate-mode`）にも対応しています。
 
 ## 必要なもの
 
@@ -40,11 +40,16 @@
 3. 一覧の「Milestone」で **確認** を押し、有効にします。Node のワーカーを動かすため、フルアクセスの plugin として承認を求められます。host API で使う権限は、ワークスペースの名前・ブランチの読み取りと Agent ステータスの通知です。
 4. 右サイドバーの旗アイコンを開きます。表示が空のままなら、コマンドパレットで **Milestone: Refresh** を実行します（ワーカーは最初のコマンドかイベントで起動します）。
 
+## 表示されないとき
+
+- パネルに「このワークスペースの Claude はまだタスクを作っていません」と出る場合、Claude がタスクを作っていません。タスクを作るかどうかは Claude が作業の大きさで決めるため、短い作業では作らないこともあります。進捗を出したいときは「タスクに分けて進めて」と頼むと作ります。
+- 設定を加える前から動いている Claude セッションでは、タスク用のツールが使えないことがあります。新しく起動し直してください。
+
 ## 仕組み
 
 ```mermaid
 flowchart LR
-  claude["Claude Code"] -- "タスクを書き込む" --> tasks["~/.claude/tasks/&lt;session-id&gt;/*.json"]
+  claude["Claude Code"] -- "タスクを書き込む" --> tasks["~/.claude/tasks/&lt;session-id&gt;/*.json<br/>（Agent Teams では session-&lt;先頭8桁&gt;）"]
   claude -- "会話を記録" --> transcript["~/.claude/projects/*/&lt;session-id&gt;.jsonl<br/>（cwd・最初の依頼文）"]
   worker["ワーカー（main.mjs）"] -- "fs.watch" --> tasks
   worker -- "先頭だけ読む" --> transcript
@@ -56,6 +61,7 @@ flowchart LR
 - Orca の plugin パネルは、ワーカーからデータを受け取れません（CSP が `connect-src 'none'` で、ワーカーとの通信路もありません）。そのため、ワーカーがパネルの HTML ファイルそのものを書き換えます。
 - Orca は開発フォルダーを監視していて、ファイルが変わるとパネルの HTML を読み直し、内容が違えばパネルを作り直します。Git URL やカタログからのインストールでは、この更新は起きません。
 - パネルは更新のたびに作り直されるため、スクロール位置は保たれません。内容が変わったときだけ書き換えます。
+- Agent Teams を率いる Claude は、タスク一覧をチーム名（`session-<セッション ID の先頭 8 桁>`）のフォルダーに書きます。どのセッションのものかは、`~/.claude/teams/<チーム名>/config.json` のリーダーのセッション ID か、なければ先頭 8 桁が一致する transcript で決めます。
 - フォーカス中のワークスペースのパスは、`workspace.readContext` が返さないため、Orca に同梱の CLI（`orca worktree ps`）で調べます。セッションは、transcript に記録された作業ディレクトリがそのパスの中にあるものを表示します。
 
 ## 開発

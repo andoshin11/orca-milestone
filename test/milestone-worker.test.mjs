@@ -68,6 +68,26 @@ test('a list Claude deletes after finishing stays on screen as done; a cleared u
   assert.ok(!html.includes('Abandon me'))
 })
 
+test('a team lead\'s list, named session-<id prefix>, shows under its workspace', async () => {
+  const home = await makeHome()
+  const panelPath = join(home, 'panel', 'index.html')
+  await writeTranscript(home, SESSION_A, { cwd: '/work/app', prompt: 'Team goal' })
+  await writeTasks(home, 'session-11111111', [task(1, 'Plan', 'completed'), task(2, 'Build', 'pending')])
+  await writeTasks(home, 'session-22222222', [])
+  const worker = createMilestoneWorker({
+    orca: fakeOrca(),
+    home,
+    panelPath,
+    cli: 'orca',
+    readActive: async () => ({ path: '/work/app', displayName: 'app', claudeStates: [] }),
+    watchDir: () => {}
+  })
+  await worker.refresh(true)
+  const html = await readFile(panelPath, 'utf8')
+  assert.ok(html.includes('Team goal'))
+  assert.ok(html.includes('1 / 2'))
+})
+
 test('a failing CLI leaves the panel showing that no workspace is known', async () => {
   const home = await makeHome()
   const panelPath = join(home, 'panel', 'index.html')

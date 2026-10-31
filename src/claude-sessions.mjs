@@ -1,21 +1,31 @@
-// Reads Claude Code's task lists (~/.claude/tasks/<session-id>/<n>.json) and the session
+// Reads Claude Code's task lists (~/.claude/tasks/<list-id>/<n>.json) and the session
 // transcripts (~/.claude/projects/<project>/<session-id>.jsonl) they belong to.
+//
+// A plain session names its list by its session id. A session that leads an agent team
+// (`claude --teammate-mode`, which Orca's Agent Teams launch uses) names it after the team,
+// `session-<first 8 hex of the session id>`.
 import { open, readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const TEAM_LIST_ID = /^session-([0-9a-f]{8})$/
 // The first user prompt sits near the top; big transcripts are never read whole.
 const TRANSCRIPT_HEAD_BYTES = 512 * 1024
 
 export function claudePaths(home) {
   return {
     tasksRoot: join(home, '.claude', 'tasks'),
-    projectsRoot: join(home, '.claude', 'projects')
+    projectsRoot: join(home, '.claude', 'projects'),
+    teamsRoot: join(home, '.claude', 'teams')
   }
 }
 
 export function isSessionId(name) {
   return SESSION_ID.test(name)
+}
+
+export function isTaskListId(name) {
+  return SESSION_ID.test(name) || TEAM_LIST_ID.test(name)
 }
 
 async function readJson(path) {
@@ -42,7 +52,7 @@ export async function readTaskList(dir) {
     .sort((a, b) => Number(a.id) - Number(b.id))
 }
 
-/** Task lists named by a session id that changed within maxAgeMs, newest first. */
+/** Task lists named by a session or a team that changed within maxAgeMs, newest first. */
 export async function listRecentTaskLists(tasksRoot, { now = Date.now(), maxAgeMs }) {
   let entries
   try {
@@ -52,13 +62,13 @@ export async function listRecentTaskLists(tasksRoot, { now = Date.now(), maxAgeM
   }
   const lists = await Promise.all(
     entries
-      .filter((entry) => entry.isDirectory() && isSessionId(entry.name))
+      .filter((entry) => entry.isDirectory() && isTaskListId(entry.name))
       .map(async (entry) => {
         const dir = join(tasksRoot, entry.name)
         try {
           // Claude replaces task files by rename, which bumps the directory's mtime.
           const { mtimeMs } = await stat(dir)
-          return { sessionId: entry.name, dir, updatedAt: mtimeMs }
+          return { listId: entry.name, dir, updatedAt: mtimeMs }
         } catch {
           return null
         }
@@ -85,6 +95,44 @@ export async function findTranscript(projectsRoot, sessionId) {
     } catch {}
   }
   return null
+}
+
+async function findTranscriptByPrefix(projectsRoot, prefix) {
+  let projects
+  try {
+    projects = await readdir(projectsRoot, { withFileTypes: true })
+  } catch {
+    return null
+  }
+  for (const project of projects) {
+    if (!project.isDirectory()) continue
+    let names
+    try {
+      names = await readdir(join(projectsRoot, project.name))
+    } catch {
+      continue
+    }
+    const name = names.find(
+      (file) => file.startsWith(prefix) && file.endsWith('.jsonl') && isSessionId(file.slice(0, -'.jsonl'.length))
+    )
+    if (name) return join(projectsRoot, project.name, name)
+  }
+  return null
+}
+
+/** The transcript of the session that owns a task list, or null. */
+export async function findListTranscript({ projectsRoot, teamsRoot }, listId) {
+  if (isSessionId(listId)) return findTranscript(projectsRoot, listId)
+  const prefix = TEAM_LIST_ID.exec(listId)?.[1]
+  if (!prefix) return null
+  // The team config names the lead session only while the team runs; afterwards only the
+  // prefix in the list id is left to go on.
+  const lead = (await readJson(join(teamsRoot, listId, 'config.json')))?.leadSessionId
+  if (typeof lead === 'string' && isSessionId(lead) && lead.startsWith(prefix)) {
+    const transcript = await findTranscript(projectsRoot, lead)
+    if (transcript) return transcript
+  }
+  return findTranscriptByPrefix(projectsRoot, `${prefix}-`)
 }
 
 function promptText(message) {

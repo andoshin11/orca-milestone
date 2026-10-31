@@ -14,7 +14,7 @@ function progress(tasks) {
 
 /**
  * @param workspace { path, displayName, claudeStates } of the focused workspace, or null
- * @param sessions  [{ sessionId, cwd, goal, tasks, updatedAt }], newest first
+ * @param sessions  [{ listId, cwd, goal, tasks, updatedAt }], newest first
  */
 export function buildModel(workspace, sessions) {
   if (!workspace) return { kind: 'no-workspace' }
@@ -22,7 +22,7 @@ export function buildModel(workspace, sessions) {
     .filter((session) => session.cwd && isInside(session.cwd, workspace.path))
     .filter((session) => session.tasks.length > 0)
     .slice(0, MAX_SESSIONS)
-    .map((session) => ({ sessionId: session.sessionId, goal: session.goal, ...progress(session.tasks) }))
+    .map((session) => ({ listId: session.listId, goal: session.goal, ...progress(session.tasks) }))
   const states = workspace.claudeStates ?? []
   return {
     kind: mine.length > 0 ? 'sessions' : 'no-tasks',

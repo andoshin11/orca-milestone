@@ -14,14 +14,14 @@ test('isInside matches the root and its subfolders only', () => {
 
 test('buildModel keeps sessions with tasks inside the focused workspace', () => {
   const model = buildModel(workspace, [
-    { sessionId: 'a', cwd: '/work/app/pkg', goal: 'Goal A', tasks: [task(1, 'x', 'completed'), task(2, 'y', 'pending')] },
-    { sessionId: 'b', cwd: '/work/other', goal: 'Goal B', tasks: [task(1, 'z', 'pending')] },
-    { sessionId: 'c', cwd: '/work/app', goal: 'Goal C', tasks: [] }
+    { listId: 'a', cwd: '/work/app/pkg', goal: 'Goal A', tasks: [task(1, 'x', 'completed'), task(2, 'y', 'pending')] },
+    { listId: 'b', cwd: '/work/other', goal: 'Goal B', tasks: [task(1, 'z', 'pending')] },
+    { listId: 'c', cwd: '/work/app', goal: 'Goal C', tasks: [] }
   ])
   assert.equal(model.kind, 'sessions')
   assert.equal(model.agent, 'working')
   assert.deepEqual(
-    model.sessions.map((s) => [s.sessionId, s.done, s.total]),
+    model.sessions.map((s) => [s.listId, s.done, s.total]),
     [['a', 1, 2]]
   )
 })
@@ -36,7 +36,7 @@ test('buildModel reports no workspace and no tasks', () => {
 test('renderPanel escapes text, shows progress and is deterministic', () => {
   const model = buildModel(workspace, [
     {
-      sessionId: 'a',
+      listId: 'a',
       cwd: '/work/app',
       goal: 'Fix <script> injection',
       tasks: [task(1, 'Read spec', 'completed'), task(2, 'Write code', 'in_progress', { activeForm: 'Writing code' }), task(3, 'Run tests', 'pending')]
