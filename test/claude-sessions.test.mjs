@@ -8,11 +8,14 @@ import {
   findTranscript,
   currentGoal,
   listRecentTaskLists,
+  isListRunning,
   readPromptBeforeTask,
+  readRunningSessionIds,
+  readTasksFromTranscript,
   readTaskList,
   readTranscriptHead
 } from '../src/claude-sessions.mjs'
-import { SESSION_A, SESSION_B, makeHome, task, writeTasks, writeTranscript } from './helpers.mjs'
+import { SESSION_A, SESSION_B, makeHome, markRunning, task, taskCalls, writeTasks, writeTranscript } from './helpers.mjs'
 
 test('readTaskList orders tasks by numeric id and skips other files', async () => {
   const home = await makeHome()
@@ -110,4 +113,39 @@ test('readPromptBeforeTask finds the request a task was created for, across chun
   assert.equal(await readPromptBeforeTask(path, 'New step'), '次のゴールに切り替えて')
   assert.equal(await readPromptBeforeTask(path, 'Old step'), '最初のゴール')
   assert.equal(await readPromptBeforeTask(path, 'Missing step'), null)
+})
+
+test('readRunningSessionIds keeps sessions whose process runs; isListRunning matches team lists by prefix', async () => {
+  const home = await makeHome()
+  const { sessionsRoot } = claudePaths(home)
+  await markRunning(home, SESSION_A)
+  await writeFile(join(sessionsRoot, '999999.json'), JSON.stringify({ pid: 2 ** 22 + 7, sessionId: SESSION_B }))
+  await writeFile(join(sessionsRoot, '1.other.key'), 'not a session')
+  const running = await readRunningSessionIds(sessionsRoot)
+  assert.deepEqual([...running], [SESSION_A])
+  assert.ok(isListRunning(SESSION_A, running))
+  assert.ok(isListRunning('session-11111111', running))
+  assert.ok(!isListRunning(SESSION_B, running))
+  assert.ok(!isListRunning('session-22222222', running))
+})
+
+test('readTasksFromTranscript replays the list, starting over once a finished list gets new tasks', async () => {
+  const home = await makeHome()
+  const calls = taskCalls(
+    [{ subject: 'A1' }, { subject: 'A2' }],
+    [{ taskId: '1', status: 'completed' }, { taskId: '2', status: 'completed' }]
+  )
+  // Ids keep counting across lists: B1..B3 are tasks 3..5.
+  const next = taskCalls(
+    [{ subject: 'B1', activeForm: 'Doing B1', metadata: { goal: 'B' } }, { subject: 'B2' }, { subject: 'B3' }],
+    [{ taskId: '3', status: 'in_progress' }, { taskId: '5', status: 'deleted' }, { taskId: '4', subject: 'B2 renamed' }],
+    3
+  )
+  const path = await writeTranscript(home, SESSION_A, { cwd: '/work/app', prompt: 'Go', extra: [...calls, ...next] })
+  const tasks = await readTasksFromTranscript(path)
+  assert.deepEqual(
+    tasks.map((t) => [t.id, t.subject, t.status]),
+    [['3', 'B1', 'in_progress'], ['4', 'B2 renamed', 'pending']]
+  )
+  assert.deepEqual([tasks[0].activeForm, tasks[0].metadata], ['Doing B1', { goal: 'B' }])
 })

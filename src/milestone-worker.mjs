@@ -6,12 +6,15 @@
 // every plugin change and remounts the frame when it differs, and it watches development folders,
 // so the rewrite reaches the sidebar within a second. That holds only for a development folder.
 import { watch } from 'node:fs'
-import { mkdir, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { mkdir, rename, stat, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import {
   claudePaths,
   findListTranscript,
   currentGoal,
+  isListRunning,
+  readRunningSessionIds,
+  readTasksFromTranscript,
   listRecentTaskLists,
   readPromptBeforeTask,
   readTaskList,
@@ -50,6 +53,8 @@ export function createMilestoneWorker({
   // Claude deletes a list's task files once every task is completed. The last tasks seen per
   // list keep a finished goal on screen as done instead of letting it vanish.
   const lastTasks = new Map()
+  // Lists already replayed from a transcript, by list and the time it last changed.
+  const replayed = new Map()
   let workspace = null
   let agents = []
   let focusKey
@@ -91,11 +96,40 @@ export function createMilestoneWorker({
     return { goal: request.prompt ?? head.goal, tasks }
   }
 
+  function isFinished(tasks) {
+    return tasks.length > 0 && tasks.every((task) => task.status === 'completed')
+  }
+
+  /**
+   * A finished list whose files Claude already deleted, replayed from its transcript. That
+   * happens when the worker starts after the list was finished, as after a restart.
+   */
+  async function replayFinished(list) {
+    const key = `${list.listId}\n${list.updatedAt}`
+    if (replayed.has(key)) return
+    replayed.set(key, true)
+    // Only a list that ever had tasks keeps a high-water mark.
+    if (!(await stat(join(list.dir, '.highwatermark')).catch(() => null))) return
+    const head = await headOf(list.listId)
+    if (!head?.transcript) return
+    const tasks = await readTasksFromTranscript(head.transcript).catch(() => [])
+    if (isFinished(tasks)) lastTasks.set(list.listId, tasks)
+  }
+
   async function allSessions() {
+    const running = await readRunningSessionIds(paths.sessionsRoot)
     const lists = await listRecentTaskLists(tasksRoot, { maxAgeMs: TASK_LIST_MAX_AGE_MS })
     const sessions = []
     for (const list of lists) {
-      const tasks = currentTasks(list.listId, await readTaskList(list.dir))
+      // A list shows only while its session runs: ending the session or removing its
+      // workspace takes it off the panel.
+      if (!isListRunning(list.listId, running)) {
+        lastTasks.delete(list.listId)
+        continue
+      }
+      const files = await readTaskList(list.dir)
+      if (files.length === 0 && !lastTasks.has(list.listId)) await replayFinished(list)
+      const tasks = currentTasks(list.listId, files)
       // A team creates its list when it starts, and most stay empty; they are not looked up.
       if (tasks.length === 0) continue
       const head = await headOf(list.listId)
@@ -112,7 +146,7 @@ export function createMilestoneWorker({
     }
     const previous = lastTasks.get(listId) ?? []
     // A list emptied before it was finished was cleared on purpose; show nothing for it.
-    return previous.every((task) => task.status === 'completed') ? previous : []
+    return isFinished(previous) ? previous : []
   }
 
   async function writePanel(html, path) {

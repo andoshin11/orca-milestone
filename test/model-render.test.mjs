@@ -52,7 +52,7 @@ test('renderPanel escapes text, shows progress and is deterministic', () => {
   assert.equal(renderPanel(model), html)
 })
 
-test('other workspaces list those needing the user first, then unfinished tasks, with progress', () => {
+test('other workspaces list those needing the user first, then unfinished and finished lists', () => {
   const agent = (name, state, since, extra = {}) => ({ workspace: name, path: `/work/${name}`, focused: false, state, since, ...extra })
   const list = (name, done, total, updatedAt) => ({
     listId: name,
@@ -79,7 +79,8 @@ test('other workspaces list those needing the user first, then unfinished tasks,
       ['question', 'attention', 1, 2],
       ['allow', 'attention', 0, 0],
       ['newer', 'idle', 2, 3],
-      ['older', 'idle', 0, 1]
+      ['older', 'idle', 0, 1],
+      ['finished', 'idle', 1, 1]
     ]
   )
 
@@ -88,9 +89,9 @@ test('other workspaces list those needing the user first, then unfinished tasks,
   assert.ok(html.includes('要確認 3'))
   assert.equal(html.match(/class="badge"/g).length, 2)
   assert.ok(html.includes('width:67%'))
-  assert.ok(!html.includes('finished') && !html.includes('busy'))
+  assert.ok(!html.includes('busy'))
   // Rows with tasks open on a click to their goal and tasks; rows without stay plain.
-  assert.equal(html.match(/<details>/g).length, 3)
+  assert.equal(html.match(/<details>/g).length, 4)
   assert.ok(html.includes('<p class="goal">Goal question</p>'))
   assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
   assert.equal(renderPanel(model), html)
