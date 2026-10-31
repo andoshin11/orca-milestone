@@ -27,7 +27,8 @@ test('refresh writes the focused workspace tasks to the panel, and only when the
       cliCalls += 1
       return { active: { path: '/work/app', displayName: 'app', claudeStates: ['working'] }, agents: [] }
     },
-    watchDir: () => {}
+    watchDir: () => {},
+    writeIntervalMs: 0
   })
 
   await worker.refresh(true)
@@ -56,7 +57,8 @@ test('a list Claude deletes after finishing stays on screen as done; a cleared u
     panelPath,
     cli: 'orca',
     readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
-    watchDir: () => {}
+    watchDir: () => {},
+    writeIntervalMs: 0
   })
   await worker.refresh(true)
   await rm(join(doneDir, '1.json'))
@@ -80,7 +82,8 @@ test('a team lead\'s list, named session-<id prefix>, shows under its workspace'
     panelPath,
     cli: 'orca',
     readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
-    watchDir: () => {}
+    watchDir: () => {},
+    writeIntervalMs: 0
   })
   await worker.refresh(true)
   const html = await readFile(panelPath, 'utf8')
@@ -107,7 +110,8 @@ test('the heading follows the goal of the current tasks, not the first prompt of
     panelPath,
     cli: 'orca',
     readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
-    watchDir: () => {}
+    watchDir: () => {},
+    writeIntervalMs: 0
   })
   await worker.refresh(true)
   let html = await readFile(panelPath, 'utf8')
@@ -137,9 +141,45 @@ test('a failing CLI leaves the panel showing that no workspace is known', async 
     readOrca: async () => {
       throw new Error('runtime unavailable')
     },
-    watchDir: () => {}
+    watchDir: () => {},
+    writeIntervalMs: 0
   })
   await worker.refresh(true)
   assert.ok((await readFile(panelPath, 'utf8')).includes('ワークスペースを開くと'))
   assert.match(logs.join('\n'), /runtime unavailable/)
+})
+
+test('rewrites within the interval wait, except when the focus moves to another workspace', async () => {
+  const home = await makeHome()
+  const panelPath = join(home, 'panel', 'index.html')
+  await writeTranscript(home, SESSION_A, { cwd: '/work/app', prompt: 'App goal' })
+  await writeTasks(home, SESSION_A, [task(1, 'One', 'pending'), task(2, 'Two', 'pending')])
+  let clock = 1_000_000
+  let active = { path: '/work/app', displayName: 'app', claudeStates: [] }
+  const worker = createMilestoneWorker({
+    orca: fakeOrca(),
+    home,
+    panelPath,
+    cli: 'orca',
+    readOrca: async () => ({ active, agents: [] }),
+    now: () => clock,
+    watchDir: () => {},
+    writeIntervalMs: 5000
+  })
+  await worker.refresh(true)
+  assert.ok((await readFile(panelPath, 'utf8')).includes('0 / 2'))
+
+  await writeTasks(home, SESSION_A, [task(1, 'One', 'completed')])
+  clock += 1000
+  await worker.refresh()
+  assert.ok((await readFile(panelPath, 'utf8')).includes('0 / 2'), 'held back inside the interval')
+
+  clock += 4000
+  await worker.refresh()
+  assert.ok((await readFile(panelPath, 'utf8')).includes('1 / 2'))
+
+  active = { path: '/work/other', displayName: 'other', claudeStates: [] }
+  clock += 100
+  await worker.refresh(true)
+  assert.ok((await readFile(panelPath, 'utf8')).includes('<h1>other</h1>'), 'a focus move shows at once')
 })
