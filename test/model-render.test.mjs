@@ -91,8 +91,8 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.ok(html.includes('width:67%'))
   assert.ok(!html.includes('busy'))
   assert.ok(html.includes('<span class="name">question<span class="repo">repo-x</span></span>'))
-  // Rows with tasks open on a click to their goal and tasks; rows without stay plain.
-  assert.equal(html.match(/<details>/g).length, 4)
+  // Rows with tasks show their goal and tasks on hover; rows without have none.
+  assert.equal(html.match(/<div class="detail">/g).length, 4)
   assert.ok(html.includes('<p class="goal">Goal question</p>'))
   assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
   assert.equal(renderPanel(model), html)
