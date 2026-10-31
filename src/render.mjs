@@ -63,13 +63,15 @@ code { font-size: 12px; }
   font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
 .others h2 .attention { color: var(--ms-todo); }
 .rows { margin: 0; padding: 0; list-style: none; }
-.row { display: block; padding: 0; }
+.row { display: block; position: relative; padding: 0; }
 .row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; }
-.row summary { cursor: pointer; list-style: none; }
-.row summary::-webkit-details-marker { display: none; }
-.row summary:hover { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
-.row details[open] > summary { background: color-mix(in oklch, var(--orca-foreground) 5%, transparent); }
-.row .detail { margin: 4px 0 8px 14px; font-size: 12px; }
+.row.has-detail:hover .head { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
+/* The detail floats above its row, over the empty middle of the panel, so nothing moves. */
+.row .detail { display: none; position: absolute; left: -6px; right: -6px; bottom: 100%; z-index: 1;
+  max-height: 60vh; overflow: auto; padding: 8px 10px; font-size: 12px;
+  border: 1px solid var(--orca-border); border-radius: var(--orca-radius, 6px);
+  background: var(--orca-card); color: var(--orca-card-foreground); box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); }
+.row:hover .detail { display: block; }
 .row .detail .goal { margin: 0 0 4px; }
 .row .top { display: flex; align-items: center; gap: 6px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
@@ -106,11 +108,10 @@ function renderRow(row) {
   const repo = row.repo ? `<span class="repo">${escape(row.repo)}</span>` : ''
   const head = `<div class="top"><span class="dot"></span><span class="name">${escape(row.workspace)}${repo}</span>${badge}${of}</div>${bar}`
   if (row.total === 0) return `<li class="row ${row.kind}"><div class="head">${head}</div></li>`
-  // A click opens the goal and the tasks. No script: the panel is rebuilt whenever its content
-  // changes, which closes the row again.
+  // Hovering a row shows its goal and tasks; plain CSS, so it needs no script.
   const goal = row.goal ? `<p class="goal">${escape(clip(row.goal, GOAL_MAX))}</p>` : ''
-  return `<li class="row ${row.kind}"><details><summary class="head">${head}</summary>
-<div class="detail">${goal}<ol>${row.tasks.map(renderTask).join('')}</ol></div></details></li>`
+  return `<li class="row ${row.kind} has-detail"><div class="head">${head}</div>
+<div class="detail">${goal}<ol>${row.tasks.map(renderTask).join('')}</ol></div></li>`
 }
 
 function renderOthers(others) {
