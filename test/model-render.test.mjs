@@ -54,14 +54,14 @@ test('renderPanel escapes text, shows progress and is deterministic', () => {
 
 test('other workspaces list those needing the user first, then unfinished and finished lists', () => {
   const agent = (name, state, since, extra = {}) => ({ workspace: name, repo: 'repo-x', path: `/work/${name}`, focused: false, state, since, ...extra })
-  const list = (name, done, total, updatedAt) => ({
+  const list = (name, done, total, updatedAt, running = false) => ({
     listId: name,
     cwd: `/work/${name}/pkg`,
     goal: `Goal ${name}`,
     updatedAt,
-    tasks: Array.from({ length: total }, (_, i) => task(i + 1, `t${i}`, i < done ? 'completed' : 'pending'))
+    tasks: Array.from({ length: total }, (_, i) => task(i + 1, `t${i}`, i < done ? 'completed' : running && i === done ? 'in_progress' : 'pending'))
   })
-  const lists = [list('question', 1, 2, 50), list('older', 0, 1, 10), list('newer', 2, 3, 40), list('finished', 1, 1, 60)]
+  const lists = [list('question', 1, 2, 50), list('older', 0, 1, 10), list('newer', 2, 3, 40, true), list('finished', 1, 1, 60)]
   const model = buildModel(workspace, lists, [
     agent('question', 'waiting', 1),
     agent('question', 'working', 2),
@@ -93,6 +93,9 @@ test('other workspaces list those needing the user first, then unfinished and fi
   // Only the finished row gets a check; the others keep a dot.
   assert.equal(html.match(/<span class="check">✓<\/span><span class="name">finished/g).length, 1)
   assert.equal(html.match(/class="check"/g).length, 1)
+  // Only the row with a task in progress gets the orange dot.
+  assert.equal(html.match(/<span class="dot running"><\/span><span class="name">newer/g).length, 1)
+  assert.equal(html.match(/class="dot running"/g).length, 1)
   assert.ok(html.includes('<span class="name">question<span class="repo">repo-x</span></span>'))
   // Rows with tasks show their goal and tasks on hover; rows without have none.
   assert.equal(html.match(/<div class="detail">/g).length, 4)

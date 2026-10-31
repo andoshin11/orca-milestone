@@ -50,7 +50,7 @@ const sessions = [
     ['依存関係の対応状況を調べる', 'completed'],
     ['CI のイメージを更新する', 'completed'],
     ['ビルドを通す', 'completed'],
-    ['ステージングで動作を確かめる', 'pending'],
+    ['ステージングで動作を確かめる', 'in_progress'],
     ['本番に出す', 'pending']
   ], 7),
   list('c', 'csv-export', '注文一覧を CSV で書き出せるようにする', [
