@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { appendFile, readFile, rm } from 'node:fs/promises'
+import { appendFile, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createMilestoneWorker } from '../src/milestone-worker.mjs'
-import { SESSION_A, SESSION_B, makeHome, task, writeTasks, writeTranscript } from './helpers.mjs'
+import { SESSION_A, SESSION_B, makeHome, markRunning, task, taskCalls, writeTasks, writeTranscript } from './helpers.mjs'
 
 function fakeOrca(context = { branch: 'main', displayName: 'app', terminals: [] }) {
   return { host: { call: async () => context }, log: () => {} }
@@ -127,6 +127,48 @@ test('the heading follows the goal of the current tasks, not the first prompt of
   assert.ok(html.includes('Goal Claude wrote'))
   assert.ok(html.includes('0 / 1'), 'tasks of the earlier goal are left out')
   assert.ok(!html.includes('Step two'))
+})
+
+test('a finished list comes back from the transcript after a restart, and goes with its session', async () => {
+  const home = await makeHome()
+  const panelPath = join(home, 'panel', 'index.html')
+  await writeTranscript(home, SESSION_A, {
+    cwd: '/work/done',
+    prompt: 'Do it',
+    running: false,
+    extra: taskCalls(
+      [{ subject: 'Old step' }, { subject: 'New step', metadata: { goal: 'Second goal' } }],
+      [{ taskId: '1', status: 'completed' }, { taskId: '2', status: 'completed' }]
+    )
+  })
+  const running = await markRunning(home, SESSION_A)
+  // Claude deleted the files of the finished list; only its high-water mark is left.
+  const dir = await writeTasks(home, SESSION_A, [])
+  await writeFile(join(dir, '.highwatermark'), '2')
+  const options = {
+    orca: fakeOrca(),
+    home,
+    panelPath,
+    cli: 'orca',
+    readOrca: async () => ({
+      active: { path: '/work/app', displayName: 'app', claudeStates: [] },
+      agents: [{ workspace: 'done', path: '/work/done', focused: false, state: 'done', since: 0 }]
+    }),
+    watchDir: () => {},
+    writeIntervalMs: 0
+  }
+  const worker = createMilestoneWorker(options)
+  await worker.refresh(true)
+  let html = await readFile(panelPath, 'utf8')
+  assert.ok(html.includes('<span class="name">done</span>'))
+  // Only the tasks of the newest goal show.
+  assert.ok(html.includes('1 / 1'))
+  assert.ok(html.includes('Second goal'))
+
+  await rm(running)
+  await worker.refresh()
+  html = await readFile(panelPath, 'utf8')
+  assert.ok(!html.includes('<span class="name">done</span>'), 'gone once the session ends')
 })
 
 test('a failing CLI leaves the panel showing that no workspace is known', async () => {

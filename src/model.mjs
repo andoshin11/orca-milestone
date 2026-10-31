@@ -17,8 +17,8 @@ function progress(tasks) {
 const NEEDS_USER = new Set(['waiting', 'blocked', 'permission'])
 
 /**
- * The other workspaces where Claude needs the user or has unfinished tasks, each with the
- * progress of its newest task list. The focused workspace is shown in full above. Whether Claude
+ * The other workspaces where Claude needs the user or has a task list, each with the progress
+ * of its newest list. Lists only reach here while their session runs. The focused workspace is shown in full above. Whether Claude
  * is at work flips every turn, so it is left out: each change would rebuild the panel.
  */
 function buildOthers(agents, sessions) {
@@ -44,14 +44,21 @@ function buildOthers(agents, sessions) {
       ...counts
     }
   })
+  const rank = (row) =>
+    row.kind === 'attention' ? 0 : row.done < row.total ? 1 : 2
   return {
     attention: rows.filter((row) => row.kind === 'attention').length,
-    // Those needing the user first, longest waiting first; then the most recently updated tasks.
+    // Those needing the user first, longest waiting first; then unfinished and then finished
+    // lists, most recently updated first.
     rows: rows
-      .filter((row) => !row.focused && (row.kind === 'attention' || row.done < row.total))
+      .filter(
+        (row) =>
+          !row.focused &&
+          (row.kind === 'attention' || row.total > 0)
+      )
       .sort(
         (a, b) =>
-          (a.kind === 'attention' ? 0 : 1) - (b.kind === 'attention' ? 0 : 1) ||
+          rank(a) - rank(b) ||
           (a.kind === 'attention' ? a.since - b.since : b.updatedAt - a.updatedAt)
       )
       .slice(0, MAX_ROWS)

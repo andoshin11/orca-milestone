@@ -4,7 +4,9 @@
 // A plain session names its list by its session id. A session that leads an agent team
 // (`claude --teammate-mode`, which Orca's Agent Teams launch uses) names it after the team,
 // `session-<first 8 hex of the session id>`.
+import { createReadStream } from 'node:fs'
 import { open, readdir, readFile, stat } from 'node:fs/promises'
+import { createInterface } from 'node:readline'
 import { join } from 'node:path'
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -17,7 +19,8 @@ export function claudePaths(home) {
   return {
     tasksRoot: join(home, '.claude', 'tasks'),
     projectsRoot: join(home, '.claude', 'projects'),
-    teamsRoot: join(home, '.claude', 'teams')
+    teamsRoot: join(home, '.claude', 'teams'),
+    sessionsRoot: join(home, '.claude', 'sessions')
   }
 }
 
@@ -27,6 +30,45 @@ export function isSessionId(name) {
 
 export function isTaskListId(name) {
   return SESSION_ID.test(name) || TEAM_LIST_ID.test(name)
+}
+
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM: the process exists but belongs to someone else.
+    return error.code === 'EPERM'
+  }
+}
+
+/**
+ * Ids of the Claude sessions running now. Each running session keeps
+ * ~/.claude/sessions/<pid>.json, removed when it exits; the pid is checked in case it crashed.
+ */
+export async function readRunningSessionIds(sessionsRoot) {
+  let names
+  try {
+    names = await readdir(sessionsRoot)
+  } catch {
+    return new Set()
+  }
+  const ids = new Set()
+  for (const name of names) {
+    if (!/^\d+\.json$/.test(name)) continue
+    const entry = await readJson(join(sessionsRoot, name))
+    if (entry && isSessionId(entry.sessionId) && Number.isInteger(entry.pid) && isRunning(entry.pid)) {
+      ids.add(entry.sessionId)
+    }
+  }
+  return ids
+}
+
+/** Whether the session that owns a task list (by its id, or a team's id prefix) is running. */
+export function isListRunning(listId, runningIds) {
+  if (isSessionId(listId)) return runningIds.has(listId)
+  const prefix = TEAM_LIST_ID.exec(listId)?.[1]
+  return Boolean(prefix) && [...runningIds].some((id) => id.startsWith(`${prefix}-`))
 }
 
 async function readJson(path) {
@@ -180,6 +222,63 @@ export function currentGoal(tasks) {
       return written ? written === goal : index > first
     })
   }
+}
+
+/**
+ * The task list as Claude left it, replayed from the TaskCreate and TaskUpdate calls in a
+ * transcript. Claude deletes a list's files once every task is completed; this brings it back.
+ */
+export async function readTasksFromTranscript(path) {
+  const created = new Map()
+  const tasks = new Map()
+  const lines = createInterface({ input: createReadStream(path), crlfDelay: Infinity })
+  for await (const line of lines) {
+    if (!line.includes('"Task')) continue
+    let entry
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      continue
+    }
+    const content = Array.isArray(entry.message?.content) ? entry.message.content : []
+    if (entry.type === 'assistant') {
+      for (const part of content) {
+        if (part?.type !== 'tool_use') continue
+        if (part.name === 'TaskCreate') created.set(part.id, part.input ?? {})
+        if (part.name === 'TaskUpdate') {
+          const { taskId, status, subject, description, activeForm, metadata } = part.input ?? {}
+          const task = tasks.get(String(taskId))
+          if (!task) continue
+          if (status === 'deleted') {
+            tasks.delete(task.id)
+            continue
+          }
+          Object.assign(task, Object.fromEntries(
+            Object.entries({ status, subject, description, activeForm }).filter(([, v]) => typeof v === 'string')
+          ))
+          if (metadata && typeof metadata === 'object') task.metadata = { ...task.metadata, ...metadata }
+        }
+      }
+    } else if (entry.type === 'user' && entry.toolUseResult?.task?.id) {
+      const result = content.find((part) => part?.type === 'tool_result' && created.has(part.tool_use_id))
+      if (!result) continue
+      const input = created.get(result.tool_use_id)
+      const id = String(entry.toolUseResult.task.id)
+      // Claude clears a list once all of it is completed, so new tasks start a new list.
+      if ([...tasks.values()].every((task) => task.status === 'completed')) tasks.clear()
+      tasks.set(id, {
+        id,
+        subject: input.subject ?? entry.toolUseResult.task.subject ?? '',
+        description: input.description ?? '',
+        ...(input.activeForm ? { activeForm: input.activeForm } : {}),
+        status: 'pending',
+        blocks: [],
+        blockedBy: [],
+        ...(input.metadata ? { metadata: input.metadata } : {})
+      })
+    }
+  }
+  return [...tasks.values()].sort((a, b) => Number(a.id) - Number(b.id))
 }
 
 /** Lines of a file from the last to the first, read in chunks from the end. */
