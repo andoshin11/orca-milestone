@@ -11,6 +11,7 @@ const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const TEAM_LIST_ID = /^session-([0-9a-f]{8})$/
 // The first user prompt sits near the top; big transcripts are never read whole.
 const TRANSCRIPT_HEAD_BYTES = 512 * 1024
+const TRANSCRIPT_CHUNK_BYTES = 1024 * 1024
 
 export function claudePaths(home) {
   return {
@@ -145,6 +146,97 @@ function promptText(message) {
   return null
 }
 
+/** What the user typed in a transcript entry, or null for tool results, reminders and summaries. */
+function userPrompt(entry) {
+  if (entry.type !== 'user' || entry.isMeta || entry.isCompactSummary || entry.message?.role !== 'user') {
+    return null
+  }
+  const prompt = promptText(entry.message)?.trim()
+  // Command wrappers, caveats and system reminders start with a tag, interruptions with a bracket.
+  if (!prompt || prompt.startsWith('<') || prompt.startsWith('[Request interrupted')) return null
+  return prompt
+}
+
+function writtenGoal(task) {
+  const goal = task.metadata?.goal
+  return typeof goal === 'string' && goal.trim() ? goal.trim() : null
+}
+
+/**
+ * The goal Claude wrote on its tasks (metadata.goal) and the tasks that belong to it. The newest
+ * task with a goal names the current one; tasks of earlier goals are left out, while tasks
+ * without a goal stay once they come after the current goal's first task. Without any goal,
+ * every task is kept.
+ */
+export function currentGoal(tasks) {
+  const last = tasks.findLast((task) => writtenGoal(task))
+  if (!last) return { goal: null, tasks }
+  const goal = writtenGoal(last)
+  const first = tasks.findIndex((task) => writtenGoal(task) === goal)
+  return {
+    goal,
+    tasks: tasks.filter((task, index) => {
+      const written = writtenGoal(task)
+      return written ? written === goal : index > first
+    })
+  }
+}
+
+/** Lines of a file from the last to the first, read in chunks from the end. */
+async function* linesFromEnd(path) {
+  const file = await open(path, 'r')
+  try {
+    let position = (await file.stat()).size
+    let carry = Buffer.alloc(0)
+    while (position > 0) {
+      const size = Math.min(TRANSCRIPT_CHUNK_BYTES, position)
+      position -= size
+      const chunk = Buffer.alloc(size)
+      await file.read(chunk, 0, size, position)
+      const buffer = Buffer.concat([chunk, carry])
+      // Split on bytes so a multi-byte character cut by the chunk edge is joined first.
+      let end = buffer.length
+      for (let i = buffer.length - 1; i >= 0; i -= 1) {
+        if (buffer[i] !== 0x0a) continue
+        if (i + 1 < end) yield buffer.subarray(i + 1, end).toString('utf8')
+        end = i
+      }
+      carry = buffer.subarray(0, end)
+    }
+    if (carry.length > 0) yield carry.toString('utf8')
+  } finally {
+    await file.close()
+  }
+}
+
+/**
+ * The prompt the user sent last before Claude created the task titled `subject`, read from the
+ * end of the transcript: the request a list of tasks was made for. Null when not found.
+ */
+export async function readPromptBeforeTask(path, subject) {
+  let created = false
+  for await (const line of linesFromEnd(path)) {
+    if (!created && !line.includes('"TaskCreate"')) continue
+    if (created && !line.includes('"user"')) continue
+    let entry
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (!created) {
+      const content = entry.type === 'assistant' ? entry.message?.content : null
+      created = Array.isArray(content) && content.some(
+        (part) => part?.type === 'tool_use' && part.name === 'TaskCreate' && part.input?.subject === subject
+      )
+      continue
+    }
+    const prompt = userPrompt(entry)
+    if (prompt) return prompt
+  }
+  return null
+}
+
 /** The working directory, branch and first user prompt recorded at the top of a transcript. */
 export async function readTranscriptHead(path) {
   let text
@@ -166,11 +258,7 @@ export async function readTranscriptHead(path) {
     }
     head.cwd ??= typeof entry.cwd === 'string' ? entry.cwd : null
     head.gitBranch ??= typeof entry.gitBranch === 'string' ? entry.gitBranch : null
-    if (!head.goal && entry.type === 'user' && !entry.isMeta && entry.message?.role === 'user') {
-      const prompt = promptText(entry.message)?.trim()
-      // Command wrappers, caveats and system reminders start with a tag, not with the ask.
-      if (prompt && !prompt.startsWith('<')) head.goal = prompt
-    }
+    head.goal ??= userPrompt(entry)
     if (head.cwd && head.goal) break
   }
   return head

@@ -8,7 +8,10 @@
 ## できること
 
 - 右サイドバーの旗アイコン（**Milestones**）に、フォーカス中のワークスペースの Claude セッションごとに次を表示します（新しい順に最大 3 件）。
-  - 最初の依頼文（ゴール）
+  - 今のゴール。次の順で決めます。
+    1. Claude がタスクに書いたゴール（`metadata.goal`）。いちばん新しいタスクのものを使い、ほかのゴールのタスクは表示しません。
+    2. 一覧の最初のタスクを作る直前に送った依頼文
+    3. セッションの最初の依頼文
   - 完了したタスク数と進捗バー
   - タスクの一覧（✓ 完了・● 進行中・○ 未着手）
 - ワークスペースを切り替えると、表示もそのワークスペースのものに変わります。
@@ -40,6 +43,15 @@
 3. 一覧の「Milestone」で **確認** を押し、有効にします。Node のワーカーを動かすため、フルアクセスの plugin として承認を求められます。host API で使う権限は、ワークスペースの名前・ブランチの読み取りと Agent ステータスの通知です。
 4. 右サイドバーの旗アイコンを開きます。表示が空のままなら、コマンドパレットで **Milestone: Refresh** を実行します（ワーカーは最初のコマンドかイベントで起動します）。
 
+## Claude にゴールを書かせる
+
+同じセッションでゴールが変わっても見出しが追従するよう、`~/.claude/CLAUDE.md` などで、タスクにゴールを付けるよう Claude に指示しておくのがおすすめです。
+
+```markdown
+- 作業を始めるときは TaskCreate で手順をタスクにし、どのタスクにも `metadata: {"goal": "<今の依頼で目指していることを 1 行で>"}` を付ける。
+- ゴールが変わったら、前のゴールの未完了タスクを completed か deleted にしてから、新しいゴールを付けたタスクを作る。
+```
+
 ## 表示されないとき
 
 - パネルに「このワークスペースの Claude はまだタスクを作っていません」と出る場合、Claude がタスクを作っていません。タスクを作るかどうかは Claude が作業の大きさで決めるため、短い作業では作らないこともあります。進捗を出したいときは「タスクに分けて進めて」と頼むと作ります。
@@ -50,7 +62,7 @@
 ```mermaid
 flowchart LR
   claude["Claude Code"] -- "タスクを書き込む" --> tasks["~/.claude/tasks/&lt;session-id&gt;/*.json<br/>（Agent Teams では session-&lt;先頭8桁&gt;）"]
-  claude -- "会話を記録" --> transcript["~/.claude/projects/*/&lt;session-id&gt;.jsonl<br/>（cwd・最初の依頼文）"]
+  claude -- "会話を記録" --> transcript["~/.claude/projects/*/&lt;session-id&gt;.jsonl<br/>（cwd・依頼文）"]
   worker["ワーカー（main.mjs）"] -- "fs.watch" --> tasks
   worker -- "先頭だけ読む" --> transcript
   worker -- "workspace.readContext（毎秒）<br/>orca worktree ps（フォーカスが変わったとき）" --> orca["Orca"]

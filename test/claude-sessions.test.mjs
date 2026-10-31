@@ -6,7 +6,9 @@ import {
   claudePaths,
   findListTranscript,
   findTranscript,
+  currentGoal,
   listRecentTaskLists,
+  readPromptBeforeTask,
   readTaskList,
   readTranscriptHead
 } from '../src/claude-sessions.mjs'
@@ -64,4 +66,48 @@ test('readTranscriptHead finds the cwd, branch and first real prompt', async () 
     goal: 'Ship the milestone panel'
   })
   assert.equal(await findTranscript(claudePaths(home).projectsRoot, SESSION_B), null)
+})
+
+test('currentGoal keeps the tasks of the newest goal Claude wrote', () => {
+  const plain = [task(1, 'a', 'completed'), task(2, 'b', 'pending')]
+  assert.deepEqual(currentGoal(plain), { goal: null, tasks: plain })
+  const goal = (text) => ({ metadata: { goal: text } })
+  const { goal: current, tasks } = currentGoal([
+    task(1, 'old 1', 'completed', goal('Old goal')),
+    task(2, 'loose old', 'completed'),
+    task(3, 'old 2', 'completed', goal('Old goal')),
+    task(4, 'new 1', 'completed', goal('  New goal ')),
+    task(5, 'loose new', 'pending'),
+    task(6, 'new 2', 'pending', goal('New goal'))
+  ])
+  assert.equal(current, 'New goal')
+  assert.deepEqual(tasks.map((t) => t.subject), ['new 1', 'loose new', 'new 2'])
+})
+
+test('readPromptBeforeTask finds the request a task was created for, across chunk edges', async () => {
+  const home = await makeHome()
+  const path = join(home, 'session.jsonl')
+  const user = (content, extra = {}) => ({ type: 'user', ...extra, message: { role: 'user', content } })
+  const create = (subject) => ({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'tool_use', name: 'TaskCreate', input: { subject } }] }
+  })
+  // Long lines put the chunk edges inside entries and inside multi-byte characters.
+  const filler = (n) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'あ'.repeat(n) }] } })
+  const lines = [
+    user('最初のゴール'),
+    create('Old step'),
+    filler(400_000),
+    user('次のゴールに切り替えて'),
+    user('<system-reminder>x</system-reminder>'),
+    user([{ type: 'tool_result', content: 'ok' }]),
+    filler(500_000),
+    create('New step'),
+    user('[Request interrupted by user]'),
+    filler(300_000)
+  ]
+  await writeFile(path, lines.map((line) => JSON.stringify(line)).join('\n') + '\n')
+  assert.equal(await readPromptBeforeTask(path, 'New step'), '次のゴールに切り替えて')
+  assert.equal(await readPromptBeforeTask(path, 'Old step'), '最初のゴール')
+  assert.equal(await readPromptBeforeTask(path, 'Missing step'), null)
 })

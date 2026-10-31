@@ -10,7 +10,9 @@ import { dirname } from 'node:path'
 import {
   claudePaths,
   findListTranscript,
+  currentGoal,
   listRecentTaskLists,
+  readPromptBeforeTask,
   readTaskList,
   readTranscriptHead
 } from './claude-sessions.mjs'
@@ -21,6 +23,7 @@ import { renderPanel } from './render.mjs'
 const TASK_LIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const FOCUS_POLL_MS = 1000
 const DEBOUNCE_MS = 150
+const REQUEST_RETRY_MS = 30_000
 
 export function createMilestoneWorker({
   orca,
@@ -28,12 +31,15 @@ export function createMilestoneWorker({
   panelPath,
   cli,
   readActive = readActiveWorkspace,
+  now = Date.now,
   watchDir = (dir, onChange) => watch(dir, { recursive: true }, onChange)
 }) {
   const paths = claudePaths(home)
   const { tasksRoot } = paths
   // Transcript heads never change once written; null entries are retried on the next refresh.
   const heads = new Map()
+  // The request a list was made for, keyed by list and the subject of its first task.
+  const requests = new Map()
   // Claude deletes a list's task files once every task is completed. The last tasks seen per
   // list keep a finished goal on screen as done instead of letting it vanish.
   const lastTasks = new Map()
@@ -50,8 +56,28 @@ export function createMilestoneWorker({
     if (heads.has(listId)) return heads.get(listId)
     const transcript = await findListTranscript(paths, listId)
     const head = transcript ? await readTranscriptHead(transcript).catch(() => null) : null
-    if (head) heads.set(listId, head)
-    return head
+    if (head) heads.set(listId, { ...head, transcript })
+    return heads.get(listId) ?? null
+  }
+
+  /**
+   * What a list is for right now. A session moves on to new goals, so its first prompt is only
+   * a last resort: the goal Claude wrote on the tasks comes first, then the request the first
+   * task was created for.
+   */
+  async function goalOf(listId, head, tasks) {
+    const current = currentGoal(tasks)
+    if (current.goal) return current
+    const key = `${listId}\n${tasks[0].subject}`
+    let request = requests.get(key)
+    // A miss is retried later: the transcript can trail the task files, and a teammate's tasks
+    // are not in the lead's transcript at all, so a whole read is not repeated every refresh.
+    if (!request || (request.prompt === null && now() - request.at > REQUEST_RETRY_MS)) {
+      const prompt = await readPromptBeforeTask(head.transcript, tasks[0].subject).catch(() => null)
+      request = { prompt, at: now() }
+      requests.set(key, request)
+    }
+    return { goal: request.prompt ?? head.goal, tasks }
   }
 
   async function sessionsIn(root) {
@@ -63,7 +89,7 @@ export function createMilestoneWorker({
       if (tasks.length === 0) continue
       const head = await headOf(list.listId)
       if (!head?.cwd || !isInside(head.cwd, root)) continue
-      sessions.push({ ...list, ...head, tasks })
+      sessions.push({ ...list, cwd: head.cwd, ...(await goalOf(list.listId, head, tasks)) })
     }
     return sessions
   }
