@@ -1,5 +1,6 @@
-// Asks the Orca CLI which workspace is focused. The host API's workspace.readContext gives only
-// a branch and a display name, which several repositories can share, so the path comes from here.
+// Asks the Orca CLI which workspace is focused and what every Claude agent is doing. The host
+// API's workspace.readContext gives only a branch and a display name, which several repositories
+// can share, and it says nothing about other workspaces, so both come from here.
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -27,19 +28,39 @@ function run(cli, args) {
   })
 }
 
-/** { path, displayName, claudeStates } of the focused workspace, or null when none is focused. */
-export async function readActiveWorkspace(cli) {
+function claudeAgents(worktree) {
+  return (worktree.agents ?? []).filter((agent) => agent.agentType === 'claude' && !agent.parentPaneKey)
+}
+
+/**
+ * The focused workspace ({ path, displayName, claudeStates }, or null) and the main Claude agent
+ * of every workspace that is not archived. Prompts and replies are left out on purpose.
+ */
+export async function readWorkspaces(cli) {
   const response = await run(cli, ['worktree', 'ps', '--limit', '1000', '--json'])
   if (!response?.ok) {
     throw new Error(response?.error?.message ?? 'orca worktree ps failed')
   }
-  const active = response.result.worktrees.find((worktree) => worktree.isActive)
-  if (!active) return null
+  const worktrees = response.result.worktrees.filter((worktree) => !worktree.isArchived)
+  const active = worktrees.find((worktree) => worktree.isActive)
   return {
-    path: active.path,
-    displayName: active.displayName,
-    claudeStates: (active.agents ?? [])
-      .filter((agent) => agent.agentType === 'claude' && !agent.parentPaneKey)
-      .map((agent) => agent.state)
+    active: active
+      ? {
+          path: active.path,
+          displayName: active.displayName,
+          claudeStates: claudeAgents(active).map((agent) => agent.state)
+        }
+      : null,
+    agents: worktrees.flatMap((worktree) =>
+      claudeAgents(worktree).map((agent) => ({
+        workspace: worktree.displayName,
+        path: worktree.path,
+        focused: Boolean(worktree.isActive),
+        unread: Boolean(worktree.unread),
+        state: agent.state,
+        since: agent.stateStartedAt ?? null,
+        title: typeof agent.taskTitle === 'string' ? agent.taskTitle : null
+      }))
+    )
   }
 }
