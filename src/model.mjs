@@ -36,6 +36,7 @@ function buildOthers(agents, sessions) {
     const counts = session ? progress(session.tasks) : { done: 0, total: 0, tasks: [] }
     return {
       workspace: entry.workspace,
+      repo: entry.repo ?? null,
       focused: entry.focused,
       kind: entry.needsUser ? 'attention' : 'idle',
       since: entry.since,
@@ -68,7 +69,7 @@ function buildOthers(agents, sessions) {
 /**
  * @param workspace { path, displayName, claudeStates } of the focused workspace, or null
  * @param sessions  [{ listId, cwd, goal, tasks, updatedAt }] of every workspace, newest first
- * @param agents    [{ workspace, path, focused, state, since }] Orca runs, one per Claude agent
+ * @param agents    [{ workspace, repo, path, focused, state, since }] Orca runs, one per Claude agent
  */
 export function buildModel(workspace, sessions, agents = []) {
   const others = buildOthers(agents, sessions)
