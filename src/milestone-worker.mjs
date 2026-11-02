@@ -21,9 +21,9 @@ import { readWorkspaces } from './orca-cli.mjs'
 import { renderBody } from './render.mjs'
 
 const TASK_LIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-const FOCUS_POLL_MS = 1000
-// Other workspaces change state without any event the worker sees, so Orca is asked again.
-const AGENTS_POLL_MS = 3000
+// Events say when the focus or an agent changes. This catches what they do not, such as a session
+// that ended without one.
+const SYNC_MS = 30_000
 const DEBOUNCE_MS = 150
 const REQUEST_RETRY_MS = 30_000
 
@@ -48,13 +48,14 @@ export function createMilestoneWorker({
   const replayed = new Map()
   let workspace = null
   let agents = []
-  let focusKey
   let lastHtml = null
   let started = null
   let timer = null
   let pendingFocus = false
   let running = null
   let rerun = false
+  // The last state heard per pane. Agents repeat a state with every hook they fire.
+  const paneStates = new Map()
 
   async function headOf(listId) {
     if (heads.has(listId)) return heads.get(listId)
@@ -193,19 +194,11 @@ export function createMilestoneWorker({
     timer = setTimeout(() => void refresh(), DEBOUNCE_MS)
   }
 
-  async function pollFocus() {
-    let context = null
-    try {
-      context = await orca.host.call('workspace.readContext', {})
-    } catch (error) {
-      orca.log(`milestone: workspace.readContext failed: ${error.code ?? error.message}`)
-      return
-    }
-    const key = context ? `${context.branch}\n${context.displayName}` : ''
-    if (key !== focusKey) {
-      focusKey = key
-      schedule(true)
-    }
+  function agentChanged({ paneKey, state, mainAgent }) {
+    const key = `${state}\n${mainAgent?.state ?? ''}`
+    if (paneStates.get(paneKey) === key) return
+    paneStates.set(paneKey, key)
+    schedule(true)
   }
 
   function start() {
@@ -214,13 +207,11 @@ export function createMilestoneWorker({
       watchDir(tasksRoot, (_event, name) => {
         if (name && !String(name).endsWith('.lock')) schedule()
       })
-      setInterval(() => void pollFocus(), FOCUS_POLL_MS)
-      setInterval(() => schedule(true), AGENTS_POLL_MS)
-      await pollFocus()
+      setInterval(() => schedule(true), SYNC_MS)
       await refresh(true)
     })()
     return started
   }
 
-  return { start, refresh, schedule, view }
+  return { start, refresh, schedule, agentChanged, view }
 }

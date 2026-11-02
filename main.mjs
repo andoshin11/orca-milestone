@@ -17,7 +17,11 @@ export default function activate(orca) {
     await worker.refresh(true)
     return 'Milestones refreshed'
   })
-  orca.events.on('agent.status.changed', async () => {
+  orca.events.on('agent.status.changed', async (event) => {
+    await worker.start()
+    worker.agentChanged(event)
+  })
+  orca.events.on('workspace.changed', async () => {
     await worker.start()
     worker.schedule(true)
   })
