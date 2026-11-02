@@ -1,5 +1,5 @@
-// Renders the panel model to a static HTML document. Orca remounts the panel whenever this
-// document changes, so it carries no script state and no clock: the same model, the same bytes.
+// Renders the panel model to the HTML of the panel's body. It carries no clock, so the same model
+// gives the same bytes and the worker posts only real changes. The styles are in panel/style.css.
 
 const GOAL_MAX = 160
 const SUBJECT_MAX = 200
@@ -22,75 +22,6 @@ const AGENT_LABELS = {
   idle: '待機中',
   none: ''
 }
-
-// Panels only get Orca's neutral tokens, so the status hues are Orca's own Tailwind v4 values
-// copied from its sources: the bars are the green-600 of its merge button, other greens the
-// emerald of the sidebar's status dot (done), orange is --agent-question (the task in progress,
-// waiting), yellow is --agent-working. Orca puts `dark`
-// or `light` on the panel's <html>, which picks the shade for each theme.
-const STYLE = `
-:root { color-scheme: light dark; --ms-bar: oklch(62.7% 0.194 149.214);
-  --ms-done: oklch(59.6% 0.145 163.225); --ms-todo: oklch(64.6% 0.222 41.116);
-  --ms-working: oklch(68.1% 0.162 75.834); --ms-track: color-mix(in oklch, var(--orca-foreground) 12%, transparent); }
-html.dark { --ms-done: oklch(69.6% 0.17 162.48); --ms-todo: oklch(70.5% 0.213 47.604);
-  --ms-working: oklch(79.5% 0.184 86.047); --ms-track: color-mix(in oklch, var(--orca-foreground) 16%, transparent); }
-body { box-sizing: border-box; display: flex; flex-direction: column; min-height: 100vh;
-  margin: 0; padding: 12px; font: 13px/1.5 system-ui, sans-serif;
-  color: var(--orca-foreground); background: var(--orca-background); }
-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-h1 { margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent { flex: none; font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
-.agent.working { color: var(--ms-working); }
-.agent.waiting { color: var(--ms-todo); }
-section { padding: 10px; margin-bottom: 10px; border: 1px solid var(--orca-border);
-  border-radius: var(--orca-radius, 6px); background: var(--orca-card); color: var(--orca-card-foreground); }
-.goal { margin: 0 0 8px; font-weight: 600; }
-.count { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--orca-muted-foreground); }
-.count strong { font-size: 12px; color: var(--ms-done); }
-.bar { height: 6px; margin: 4px 0 10px; border-radius: 3px; background: var(--ms-track); overflow: hidden; }
-.bar > div { height: 100%; border-radius: 3px; background: var(--ms-bar); }
-ol { margin: 0; padding: 0; list-style: none; }
-li { display: flex; gap: 8px; padding: 2px 0; }
-li .mark { flex: none; width: 1em; text-align: center; font-weight: 700; color: var(--ms-todo); }
-li.completed { color: var(--orca-muted-foreground); }
-li.completed .mark { color: var(--ms-done); }
-li.pending .mark { color: var(--orca-muted-foreground); }
-li.completed .subject { text-decoration: line-through; }
-li.in_progress { font-weight: 600; }
-.empty { color: var(--orca-muted-foreground); }
-code { font-size: 12px; }
-.others { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--orca-border); }
-.others h2 { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 6px;
-  font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
-.others h2 .attention { color: var(--ms-todo); }
-.rows { margin: 0; padding: 0; list-style: none; }
-.row { display: block; position: relative; padding: 0; }
-.row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; }
-.row.has-detail .head { cursor: pointer; }
-.row.has-detail:hover .head { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
-/* The detail floats above its row, over the empty middle of the panel, so nothing moves. */
-.row .detail { display: none; position: absolute; left: -6px; right: -6px; bottom: 100%; z-index: 1;
-  max-height: 60vh; overflow: auto; padding: 8px 10px; font-size: 12px;
-  border: 1px solid var(--orca-border); border-radius: var(--orca-radius, 6px);
-  background: var(--orca-card); color: var(--orca-card-foreground); box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); }
-.row:hover .detail { display: block; }
-.row .detail .goal { margin: 0 0 4px; }
-.row .detail .title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; padding-bottom: 6px;
-  border-bottom: 1px solid var(--orca-border); }
-.row .detail .title b { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.row .detail .title .repo { margin-left: 0; }
-.row .detail .title .of { flex: none; }
-.row .top { display: flex; align-items: center; gap: 6px; }
-.row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
-.row.attention .dot, .row .dot.running { background: var(--ms-todo); }
-.row .check { flex: none; width: 8px; font-size: 11px; font-weight: 700; line-height: 1; text-align: center; color: var(--ms-done); }
-.row .name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .repo { margin-left: 6px; font-size: 11px; color: var(--orca-muted-foreground); }
-.row .badge { flex: none; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 16px;
-  color: var(--ms-todo); background: color-mix(in oklch, var(--ms-todo) 18%, transparent); }
-.row .of { flex: none; font-size: 11px; color: var(--ms-done); }
-.row .bar { height: 4px; margin: 4px 0 0 14px; }
-`
 
 const MARKS = { completed: '✓', in_progress: '●', pending: '○' }
 
@@ -139,7 +70,7 @@ function renderOthers(others) {
 <ol class="rows">${others.rows.map(renderRow).join('')}</ol></div>`
 }
 
-function renderBody(model) {
+export function renderBody(model) {
   // The focused workspace sits at the top and the others at the bottom edge, apart.
   return `<main>${renderFocused(model)}</main>${renderOthers(model.others)}`
 }
@@ -154,11 +85,4 @@ function renderFocused(model) {
     return `${header}<p class="empty">このワークスペースの Claude はまだタスクを作っていません。</p>`
   }
   return header + model.sessions.map(renderSession).join('')
-}
-
-export function renderPanel(model) {
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${STYLE}</style></head>
-<body>${renderBody(model)}</body></html>
-`
 }

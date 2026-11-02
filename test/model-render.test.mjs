@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { buildModel, isInside } from '../src/model.mjs'
-import { renderPanel } from '../src/render.mjs'
+import { renderBody } from '../src/render.mjs'
 import { task } from './helpers.mjs'
 
 const workspace = { path: '/work/app', displayName: 'app', claudeStates: ['working'] }
@@ -33,7 +33,7 @@ test('buildModel reports no workspace and no tasks', () => {
   assert.equal(model.agent, 'none')
 })
 
-test('renderPanel escapes text, shows progress and is deterministic', () => {
+test('renderBody escapes text, shows progress and is deterministic', () => {
   const model = buildModel(workspace, [
     {
       listId: 'a',
@@ -42,14 +42,14 @@ test('renderPanel escapes text, shows progress and is deterministic', () => {
       tasks: [task(1, 'Read spec', 'completed'), task(2, 'Write code', 'in_progress', { activeForm: 'Writing code' }), task(3, 'Run tests', 'pending')]
     }
   ])
-  const html = renderPanel(model)
+  const html = renderBody(model)
   assert.ok(html.includes('Fix &lt;script&gt; injection'))
   assert.ok(!html.includes('<script>'))
   assert.ok(html.includes('1 / 3'))
   assert.ok(html.includes('width:33%'))
   assert.ok(html.includes('Writing code'))
   assert.ok(html.includes('作業中'))
-  assert.equal(renderPanel(model), html)
+  assert.equal(renderBody(model), html)
 })
 
 test('other workspaces list those needing the user first, then unfinished and finished lists', () => {
@@ -84,7 +84,7 @@ test('other workspaces list those needing the user first, then unfinished and fi
     ]
   )
 
-  const html = renderPanel(model)
+  const html = renderBody(model)
   assert.ok(html.includes('ほかのワークスペース'))
   assert.ok(html.includes('要確認 3'))
   assert.equal(html.match(/class="badge"/g).length, 2)
@@ -102,5 +102,5 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.ok(html.includes('<div class="detail"><div class="title"><b>question</b><span class="repo">repo-x</span><span class="of">1 / 2</span></div>'))
   assert.ok(html.includes('<p class="goal">Goal question</p>'))
   assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
-  assert.equal(renderPanel(model), html)
+  assert.equal(renderBody(model), html)
 })

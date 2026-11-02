@@ -1,13 +1,9 @@
-// Keeps the panel document in step with the focused workspace, Claude's task lists and the state
-// of every Claude agent Orca runs.
-//
-// Panels cannot receive data from a worker (their CSP is connect-src 'none' and there is no
-// channel), so the worker rewrites the panel's HTML file instead. Orca rereads a panel's HTML on
-// every plugin change and remounts the frame when it differs, and it watches development folders,
-// so the rewrite reaches the sidebar within a second. That holds only for a development folder.
+// Keeps the panel in step with the focused workspace, Claude's task lists and the state of every
+// Claude agent Orca runs. The worker renders the body of the panel and posts it; the panel patches
+// its DOM, so an update keeps the frame, the scroll position and a row's open detail.
 import { watch } from 'node:fs'
-import { mkdir, rename, stat, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { mkdir, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import {
   claudePaths,
   findListTranscript,
@@ -22,7 +18,7 @@ import {
 } from './claude-sessions.mjs'
 import { buildModel } from './model.mjs'
 import { readWorkspaces } from './orca-cli.mjs'
-import { renderPanel } from './render.mjs'
+import { renderBody } from './render.mjs'
 
 const TASK_LIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const FOCUS_POLL_MS = 1000
@@ -30,18 +26,13 @@ const FOCUS_POLL_MS = 1000
 const AGENTS_POLL_MS = 3000
 const DEBOUNCE_MS = 150
 const REQUEST_RETRY_MS = 30_000
-// Orca replaces the panel's frame on every rewrite, which blanks it for a moment, so rewrites
-// are spaced out. Moving to another workspace still shows at once.
-const WRITE_INTERVAL_MS = 5000
 
 export function createMilestoneWorker({
   orca,
   home,
-  panelPath,
   cli,
   readOrca = readWorkspaces,
   now = Date.now,
-  writeIntervalMs = WRITE_INTERVAL_MS,
   watchDir = (dir, onChange) => watch(dir, { recursive: true }, onChange)
 }) {
   const paths = claudePaths(home)
@@ -59,9 +50,6 @@ export function createMilestoneWorker({
   let agents = []
   let focusKey
   let lastHtml = null
-  let lastWriteAt = -Infinity
-  let lastPath
-  let writeTimer = null
   let started = null
   let timer = null
   let pendingFocus = false
@@ -149,23 +137,16 @@ export function createMilestoneWorker({
     return isFinished(previous) ? previous : []
   }
 
-  async function writePanel(html, path) {
-    clearTimeout(writeTimer)
+  function publish(html) {
     if (html === lastHtml) return
-    const wait = lastWriteAt + writeIntervalMs - now()
-    if (path === lastPath && wait > 0) {
-      // A refresh at the end of the interval writes whatever is newest by then.
-      writeTimer = setTimeout(() => void refresh(), wait)
-      writeTimer.unref?.()
-      return
-    }
-    await mkdir(dirname(panelPath), { recursive: true })
-    const temporary = `${panelPath}.tmp`
-    await writeFile(temporary, html)
-    await rename(temporary, panelPath)
     lastHtml = html
-    lastWriteAt = now()
-    lastPath = path
+    orca.panels.post('view.changed', { html })
+  }
+
+  /** What a panel shows when it opens; it starts the worker's refreshes if nothing has yet. */
+  async function view() {
+    await start()
+    return { html: lastHtml ?? renderBody({ kind: 'no-workspace' }) }
   }
 
   async function refreshOnce(askOrca) {
@@ -177,7 +158,7 @@ export function createMilestoneWorker({
       }
     }
     const sessions = await allSessions()
-    await writePanel(renderPanel(buildModel(workspace, sessions, agents)), workspace?.path ?? null)
+    publish(renderBody(buildModel(workspace, sessions, agents)))
   }
 
   /** Runs refreshes one at a time; a request during a run starts one more afterwards. */
@@ -241,5 +222,5 @@ export function createMilestoneWorker({
     return started
   }
 
-  return { start, refresh, schedule }
+  return { start, refresh, schedule, view }
 }

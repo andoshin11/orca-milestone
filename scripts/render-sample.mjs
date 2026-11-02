@@ -2,11 +2,11 @@
 //
 //   node scripts/render-sample.mjs <out.html> [--hover]
 //
-// The page wraps the panel in the same sandboxed frame Orca uses, with the design tokens of
-// Orca's dark theme. --hover shows the detail of one other workspace, as a hover would.
-import { writeFile } from 'node:fs/promises'
+// The page wraps the panel in a sandboxed frame, with the design tokens of Orca's dark theme. --hover shows the detail of one other workspace, as a hover would.
+import { readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { buildModel } from '../src/model.mjs'
-import { renderPanel } from '../src/render.mjs'
+import { renderBody } from '../src/render.mjs'
 
 const [out, flag] = process.argv.slice(2)
 if (!out) {
@@ -92,10 +92,10 @@ const hover = flag === '--hover'
   ? '<style>.row.has-detail:nth-child(2) .detail{display:block}' +
     '.row.has-detail:nth-child(2) .head{background:color-mix(in oklch,#fafafa 7%,transparent)}</style>'
   : ''
-const panel = renderPanel(model)
-  .replace('<html>', '<html class="dark">')
-  .replace('<head>', `<head><style>:root{${ORCA_DARK_TOKENS}}</style>`)
-  .replace('</head>', `${hover}</head>`)
+const style = await readFile(join(import.meta.dirname, '..', 'panel', 'style.css'), 'utf8')
+const panel =
+  `<!doctype html><html class="dark"><head><meta charset="utf-8"><style>:root{${ORCA_DARK_TOKENS}}</style>` +
+  `<style>${style}</style>${hover}</head><body>${renderBody(model)}</body></html>`
 const srcdoc = panel.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
 
 await writeFile(
