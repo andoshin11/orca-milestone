@@ -5,7 +5,7 @@
   "id": "milestone",
   "publisher": "andoshin11",
   "name": "Milestone",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Shows the tasks Claude Code is working through in the focused workspace as milestones in the right sidebar.",
   "author": { "name": "andoshin11", "url": "https://github.com/andoshin11" },
   "repository": "https://github.com/andoshin11/orca-milestone",
