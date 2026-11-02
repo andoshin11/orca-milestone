@@ -39,6 +39,19 @@ test('patchChildren replaces other tags, drops extras and removes old attributes
   assert.equal(root.innerHTML, '<div>text</div>')
 })
 
+test('patchChildren replaces an element whose data-key differs, and keeps one whose key is the same', () => {
+  const root = body('<section data-key="a"><p>0 / 2</p></section>')
+  const section = root.children[0]
+
+  patchChildren(root, '<section data-key="a"><p>1 / 2</p></section>')
+  assert.equal(root.children[0], section)
+  assert.equal(section.textContent, '1 / 2')
+
+  patchChildren(root, '<section data-key="b"><p>0 / 5</p></section>')
+  assert.notEqual(root.children[0], section)
+  assert.equal(root.children[0].textContent, '0 / 5')
+})
+
 test('patchChildren ends with exactly the wanted markup, from an empty panel too', () => {
   const root = body()
   const html = '<main><header><h1>app</h1></header></main><div class="others"><h2>x</h2></div>'

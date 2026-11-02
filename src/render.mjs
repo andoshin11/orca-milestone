@@ -28,13 +28,15 @@ const MARKS = { completed: '✓', in_progress: '●', pending: '○' }
 function renderTask(task) {
   const subject = task.status === 'in_progress' && task.activeForm ? task.activeForm : task.subject
   const status = MARKS[task.status] ? task.status : 'pending'
-  return `<li class="${status}"><span class="mark">${MARKS[status]}</span><span class="subject">${escape(clip(subject, SUBJECT_MAX))}</span></li>`
+  return `<li class="${status}"><span class="mark">${MARKS[status]}</span><span class="subject"><span class="strike">${escape(clip(subject, SUBJECT_MAX))}</span></span></li>`
 }
 
 function renderSession(session) {
   const percent = session.total === 0 ? 0 : Math.round((session.done / session.total) * 100)
   const goal = session.goal ? `<p class="goal">${escape(clip(session.goal, GOAL_MAX))}</p>` : ''
-  return `<section>${goal}<div class="count"><span>マイルストーン</span><strong>${session.done} / ${session.total}</strong></div>
+  // The key tells the panel this is another list, which it shows at once instead of animating.
+  const key = escape(`${session.listId}\n${clip(session.goal ?? '', GOAL_MAX)}`)
+  return `<section data-key="${key}">${goal}<div class="count"><span>マイルストーン</span><strong>${session.done} / ${session.total}</strong></div>
 <div class="bar"><div style="width:${percent}%"></div></div>
 <ol>${session.tasks.map(renderTask).join('')}</ol></section>`
 }
@@ -55,11 +57,12 @@ function renderRow(row) {
       ? '<span class="dot running"></span>'
       : '<span class="dot"></span>'
   const head = `<div class="top">${mark}<span class="name">${escape(row.workspace)}${repo}</span>${badge}${of}</div>${bar}`
-  if (row.total === 0) return `<li class="row ${row.kind}"><div class="head">${head}</div></li>`
+  const key = escape(`${row.workspace}\n${row.repo ?? ''}\n${clip(row.goal ?? '', GOAL_MAX)}`)
+  if (row.total === 0) return `<li class="row ${row.kind}" data-key="${key}"><div class="head">${head}</div></li>`
   // Hovering a row shows its goal and tasks; plain CSS, so it needs no script.
   const goal = row.goal ? `<p class="goal">${escape(clip(row.goal, GOAL_MAX))}</p>` : ''
   const title = `<div class="title"><b>${escape(row.workspace)}</b>${repo}<span class="of">${row.done} / ${row.total}</span></div>`
-  return `<li class="row ${row.kind} has-detail"><div class="head">${head}</div>
+  return `<li class="row ${row.kind} has-detail" data-key="${key}"><div class="head">${head}</div>
 <div class="detail">${title}${goal}<ol>${row.tasks.map(renderTask).join('')}</ol></div></li>`
 }
 

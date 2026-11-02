@@ -22,14 +22,17 @@ section { padding: 10px; margin-bottom: 10px; border: 1px solid var(--orca-borde
 .count { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--orca-muted-foreground); }
 .count strong { font-size: 12px; color: var(--ms-done); }
 .bar { height: 6px; margin: 4px 0 10px; border-radius: 3px; background: var(--ms-track); overflow: hidden; }
-.bar > div { height: 100%; border-radius: 3px; background: var(--ms-bar); }
+.bar > div { height: 100%; border-radius: 3px; background: var(--ms-bar); transition: width 400ms ease-out; }
 ol { margin: 0; padding: 0; list-style: none; }
-li { display: flex; gap: 8px; padding: 2px 0; }
-li .mark { flex: none; width: 1em; text-align: center; font-weight: 700; color: var(--ms-todo); }
+li { display: flex; gap: 8px; padding: 2px 0; transition: color 300ms ease-out; }
+li .mark { flex: none; width: 1em; text-align: center; font-weight: 700; color: var(--ms-todo); transition: color 300ms ease-out; }
 li.completed { color: var(--orca-muted-foreground); }
 li.completed .mark { color: var(--ms-done); }
 li.pending .mark { color: var(--orca-muted-foreground); }
-li.completed .subject { text-decoration: line-through; }
+/* A background, because text-decoration cannot be drawn gradually. On an inline box it runs on
+   across wrapped lines. */
+li .strike { background: linear-gradient(currentColor, currentColor) 0 55% / 0 1px no-repeat; transition: background-size 400ms ease-out; }
+li.completed .strike { background-size: 100% 1px; }
 li.in_progress { font-weight: 600; }
 .empty { color: var(--orca-muted-foreground); }
 code { font-size: 12px; }
@@ -64,3 +67,6 @@ code { font-size: 12px; }
   color: var(--ms-todo); background: color-mix(in oklch, var(--ms-todo) 18%, transparent); }
 .row .of { flex: none; font-size: 11px; color: var(--ms-done); }
 .row .bar { height: 4px; margin: 4px 0 0 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .bar > div, li, li .mark, li .strike { transition: none; }
+}

@@ -104,3 +104,12 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
   assert.equal(renderBody(model), html)
 })
+
+test('a list keeps its key while its tasks progress, and gets another with a new goal', () => {
+  const keyOf = (html) => html.match(/<section data-key="([^"]*)"/)[1]
+  const render = (goal, status) =>
+    renderBody(buildModel(workspace, [{ listId: 'a', cwd: '/work/app', goal, tasks: [task(1, 'x', status)] }]))
+  assert.equal(keyOf(render('Goal', 'pending')), keyOf(render('Goal', 'completed')))
+  assert.notEqual(keyOf(render('Goal', 'pending')), keyOf(render('Other goal', 'pending')))
+  assert.ok(render('"quoted" <goal>', 'pending').includes('&quot;quoted&quot; &lt;goal&gt;'))
+})
