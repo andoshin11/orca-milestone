@@ -1,28 +1,36 @@
 // Shows the body the worker renders: what it has when the panel opens, then each change it posts.
 // Orca recreates the panel when its sidebar tab is switched, and nothing is posted while it is
-// closed, so every open asks again.
+// closed, so every open asks again. Asking again while open also keeps the worker from being
+// stopped as idle, which would end its watch on the task lists.
 import { patchChildren } from './patch.mjs'
 
 const RETRY_MS = 3000
+// Orca stops a worker after 5 minutes without any call.
+const KEEP_ALIVE_MS = 60_000
 
-let pushed = false
+let pushes = 0
+let loaded = false
 
 const { plugin } = window.orca
 
 plugin.on('view.changed', ({ html }) => {
-  pushed = true
+  pushes += 1
+  loaded = true
   patchChildren(document.body, html)
 })
 
 async function load() {
+  const seen = pushes
   try {
     const { html } = await plugin.request('view.get')
     // A post that arrived while this was on its way is newer.
-    if (!pushed) patchChildren(document.body, html)
+    if (pushes === seen) patchChildren(document.body, html)
+    loaded = true
   } catch (error) {
     console.warn(`milestone: view.get failed: ${error.code ?? error.message}`)
-    if (!pushed) setTimeout(load, RETRY_MS)
+    if (!loaded) setTimeout(load, RETRY_MS)
   }
 }
 
 void load()
+setInterval(load, KEEP_ALIVE_MS)

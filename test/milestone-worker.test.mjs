@@ -5,10 +5,9 @@ import { test } from 'node:test'
 import { createMilestoneWorker } from '../src/milestone-worker.mjs'
 import { SESSION_A, SESSION_B, makeHome, markRunning, task, taskCalls, writeTasks, writeTranscript } from './helpers.mjs'
 
-function fakeOrca(context = { branch: 'main', displayName: 'app', terminals: [] }) {
+function fakeOrca() {
   const posts = []
   return {
-    host: { call: async () => context },
     log: () => {},
     panels: { post: (event, payload) => posts.push({ event, payload }) },
     posts,
@@ -234,8 +233,42 @@ test('view answers with what the panel should show, even when Orca could not be 
     })
     const { html } = await worker.view()
     assert.ok(html.includes('ワークスペースを開くと'))
+    assert.equal(timers.length, 1, 'one slow sync; the rest is driven by events')
   } finally {
     globalThis.setInterval = realSetInterval
     timers.forEach(clearInterval)
   }
+})
+
+test('an agent event asks Orca again only when that pane changed state', async () => {
+  const home = await makeHome()
+  let asked = 0
+  const worker = createMilestoneWorker({
+    orca: fakeOrca(),
+    home,
+    cli: 'orca',
+    readOrca: async () => {
+      asked += 1
+      return { active: null, agents: [] }
+    },
+    watchDir: () => {}
+  })
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 200))
+
+  worker.agentChanged({ paneKey: 'a', state: 'working' })
+  await settle()
+  assert.equal(asked, 1)
+
+  worker.agentChanged({ paneKey: 'a', state: 'working' })
+  await settle()
+  assert.equal(asked, 1, 'the same state again')
+
+  worker.agentChanged({ paneKey: 'a', state: 'waiting' })
+  worker.agentChanged({ paneKey: 'b', state: 'working' })
+  await settle()
+  assert.equal(asked, 2, 'changes close together make one refresh')
+
+  worker.agentChanged({ paneKey: 'b', state: 'working', mainAgent: { state: 'waiting' } })
+  await settle()
+  assert.equal(asked, 3, 'the main agent of a pane counts too')
 })
