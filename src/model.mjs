@@ -18,17 +18,19 @@ const NEEDS_USER = new Set(['waiting', 'blocked', 'permission'])
 
 /**
  * The other workspaces where Claude needs the user or has a task list, each with the progress
- * of its newest list. Lists only reach here while their session runs. The focused workspace is shown in full above. Whether Claude
- * is at work flips every turn, so it is left out: each change would rebuild the panel.
+ * of its newest list. Lists only reach here while their session runs. The focused workspace is
+ * shown in full above. Whether Claude is at work flips every turn, so it shows on a row but does
+ * not decide which rows show or their order, which would make them jump.
  */
 function buildOthers(agents, sessions) {
   const byWorkspace = new Map()
   for (const agent of agents) {
-    const entry = byWorkspace.get(agent.path) ?? { ...agent, needsUser: false, since: 0 }
+    const entry = byWorkspace.get(agent.path) ?? { ...agent, needsUser: false, working: false, since: 0 }
     if (NEEDS_USER.has(agent.state)) {
       entry.needsUser = true
       entry.since = Math.max(entry.since, agent.since ?? 0)
     }
+    if (agent.state === 'working') entry.working = true
     byWorkspace.set(agent.path, entry)
   }
   const rows = [...byWorkspace.values()].map((entry) => {
@@ -39,6 +41,7 @@ function buildOthers(agents, sessions) {
       repo: entry.repo ?? null,
       focused: entry.focused,
       kind: entry.needsUser ? 'attention' : 'idle',
+      working: entry.working && !entry.needsUser,
       since: entry.since,
       updatedAt: session?.updatedAt ?? 0,
       goal: session?.goal ?? null,
