@@ -43,7 +43,11 @@ function renderSession(session) {
 
 function renderRow(row) {
   const percent = row.total === 0 ? 0 : Math.round((row.done / row.total) * 100)
-  const badge = row.kind === 'attention' ? '<span class="badge">要確認</span>' : ''
+  const badge = row.kind === 'attention'
+    ? '<span class="badge">要確認</span>'
+    : row.working
+      ? `<span class="working">${AGENT_LABELS.working}</span>`
+      : ''
   const of = row.total > 0 ? `<span class="of">${row.done} / ${row.total}</span>` : ''
   const bar = row.total > 0 ? `<div class="bar"><div style="width:${percent}%"></div></div>` : ''
   const repo = row.repo ? `<span class="repo">${escape(row.repo)}</span>` : ''

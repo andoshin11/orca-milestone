@@ -102,6 +102,9 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.ok(html.includes('<div class="detail"><div class="title"><b>question</b><span class="repo">repo-x</span><span class="of">1 / 2</span></div>'))
   assert.ok(html.includes('<p class="goal">Goal question</p>'))
   assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
+  // At work: only the row with an agent working that needs nothing from the user.
+  assert.deepEqual(model.others.rows.filter((row) => row.working).map((row) => row.workspace), ['newer'])
+  assert.equal(html.match(/<span class="working">作業中<\/span>/g).length, 1)
   assert.equal(renderBody(model), html)
 })
 
