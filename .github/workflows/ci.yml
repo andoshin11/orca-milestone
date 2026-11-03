@@ -24,11 +24,13 @@ jobs:
 
       - run: npm test
 
-      # Validate the manifest with the parser of the Orca release named in engines.orca.
+      # Validate the manifest with the parser of the first Orca release that accepts it. engines.orca
+      # stays >=1.4.248 because 1.4.247 requires that value for statusBarItems and gates plugins
+      # against its newest schema version, so it loads the plugin.
       - uses: actions/checkout@v5
         with:
           repository: stablyai/orca
-          ref: v1.4.246
+          ref: v1.4.247
           path: .orca
           sparse-checkout: src/shared
           persist-credentials: false
