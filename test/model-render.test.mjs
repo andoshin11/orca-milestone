@@ -97,6 +97,10 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.equal(html.match(/<span class="dot running"><\/span><span class="name">newer/g).length, 1)
   assert.equal(html.match(/class="dot running"/g).length, 1)
   assert.ok(html.includes('<span class="name">question<span class="repo">repo-x</span></span>'))
+  // Every row, with a list or without, opens its workspace; the path is escaped into the attribute.
+  assert.equal(html.match(/role="button"/g).length, 5)
+  assert.ok(html.includes('data-open="/work/allow"'))
+  assert.ok(renderBody(buildModel(workspace, [], [agent('a"b', 'waiting', 1)])).includes('data-open="/work/a&quot;b"'))
   // Rows with tasks show their goal and tasks on hover; rows without have none.
   assert.equal(html.match(/<div class="detail">/g).length, 4)
   assert.ok(html.includes('<div class="detail"><div class="title"><b>question</b><span class="repo">repo-x</span><span class="of">1 / 2</span></div>'))

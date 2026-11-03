@@ -12,6 +12,7 @@ export default function activate(orca) {
   })
   // Orca starts the worker lazily, on the first command, event or panel request.
   orca.panels.handle('view.get', () => worker.view())
+  orca.panels.handle('workspace.open', ({ path }) => worker.openWorkspace(path))
   orca.commands.register('milestone.refresh', async () => {
     await worker.start()
     await worker.refresh(true)

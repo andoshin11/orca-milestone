@@ -272,3 +272,36 @@ test('an agent event asks Orca again only when that pane changed state', async (
   await settle()
   assert.equal(asked, 3, 'the main agent of a pane counts too')
 })
+
+test('openWorkspace opens the listed workspace at the path, and only logs a miss or a failure', async () => {
+  const orca = fakeOrca()
+  const logs = []
+  orca.log = (line) => logs.push(line)
+  const calls = []
+  let fail = false
+  orca.host = {
+    call: async (method, params) => {
+      calls.push([method, params])
+      if (fail) throw new Error('refused')
+      return {
+        workspaces: [
+          { id: 'identity:a', path: '/work/a' },
+          { id: 'identity:b', path: '/work/b' }
+        ]
+      }
+    }
+  }
+  const worker = createMilestoneWorker({ orca, home: await makeHome(), cli: 'orca', watchDir: () => {} })
+
+  assert.deepEqual(await worker.openWorkspace('/work/b'), { opened: true })
+  assert.deepEqual(calls.at(-1), ['workspace.open', { workspaceId: 'identity:b' }])
+
+  calls.length = 0
+  assert.deepEqual(await worker.openWorkspace('/work/gone'), { opened: false })
+  assert.deepEqual(calls.map(([method]) => method), ['workspace.list'])
+  assert.match(logs.join('\n'), /no workspace to open at \/work\/gone/)
+
+  fail = true
+  assert.deepEqual(await worker.openWorkspace('/work/a'), { opened: false })
+  assert.match(logs.join('\n'), /could not open the workspace: refused/)
+})

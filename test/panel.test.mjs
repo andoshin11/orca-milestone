@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { JSDOM } from 'jsdom'
+import { openOnPress } from '../panel/open.mjs'
 import { patchChildren } from '../panel/patch.mjs'
 
 const panelDir = join(import.meta.dirname, '..', 'panel')
@@ -65,4 +66,30 @@ test('the panel document loads its stylesheet and script', async () => {
   assert.ok(html.includes('src="main.mjs"'))
   await readFile(join(panelDir, 'style.css'), 'utf8')
   await readFile(join(panelDir, 'main.mjs'), 'utf8')
+})
+
+test('pressing a row head opens its workspace, also after a patch, but its detail does not', () => {
+  const row = (path) =>
+    `<li class="row"><div class="head" role="button" tabindex="0" data-open="${path}"><span class="name">app</span></div><div class="detail"><p>goal</p></div></li>`
+  const root = body(`<ol>${row('/work/a')}</ol>`)
+  const opened = []
+  openOnPress(root, (path) => opened.push(path))
+  const { MouseEvent, KeyboardEvent } = root.ownerDocument.defaultView
+  const click = (selector) => root.querySelector(selector).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+  click('.name')
+  assert.deepEqual(opened, ['/work/a'])
+
+  click('.detail p')
+  assert.equal(opened.length, 1)
+
+  patchChildren(root, `<ol>${row('/work/b')}</ol>`)
+  click('.head')
+  assert.equal(opened.at(-1), '/work/b')
+
+  const press = (key) => root.querySelector('.head').dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  press('Enter')
+  press(' ')
+  press('a')
+  assert.equal(opened.length, 4)
 })

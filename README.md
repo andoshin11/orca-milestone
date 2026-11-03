@@ -3,7 +3,7 @@
 [Orca](https://github.com/stablyai/orca) の plugin です。フォーカス中のワークスペースで Claude Code が進めているタスクを、ゴールまでのマイルストーンとして右サイドバーに表示します。タスクが進むと、すぐに表示が変わります。
 
 > [!WARNING]
-> Orca の plugin 機能は Alpha です。この plugin は Orca 1.4.246 以上を対象にしています。
+> Orca の plugin 機能は Alpha です。この plugin は Orca 1.4.247 以上を対象にしています。
 
 <p>
   <img src="docs/images/panel.png" width="300" alt="Milestones パネル。上部にフォーカス中のワークスペースのゴールとタスク、下端にほかのワークスペースの進捗が並ぶ">
@@ -25,6 +25,7 @@
 - パネルの下端に「ほかのワークスペース」として、Orca で動いているほかの Claude を並べます（最大 8 件）。
   - 要確認（入力待ち・許可待ち）のものを先頭に、オレンジの「要確認」を付けて出します。次に、タスクが残っているもの、すべて完了したものの順に、それぞれタスクが新しく動いた順で出します。
   - 各行は、印（要確認と、実行中のタスクがあるものはオレンジの点、タスクがすべて完了したものは緑のチェック、ほかはグレーの点）、ワークスペース名（横に小さくプロジェクト名）、Claude が動いているときの「作業中」と、いちばん新しいタスク一覧の進捗バー・完了数です。「作業中」はターンごとに変わるので、行の並びや表示する行には影響しません。行にマウスを乗せると、ワークスペース名・ゴール・タスクの一覧が行の上に重なって出ます。
+  - 行を押すと、そのワークスペースへ移動します（キーボードで選んで Enter か Space でも移動できます）。
   - 行をクリックしてそのワークスペースへ移ることはできません（パネルから Orca を操作する API がないため）。
 - タスク一覧は、その Claude セッションが動いている間だけ表示します。セッションを終了したり、ワークスペースを削除したりすると消えます。動いているセッションは、Claude が `~/.claude/sessions/<pid>.json` に書く情報で判断します。
 - Claude はすべてのタスクを完了するとタスク一覧のファイルを消しますが、この plugin はセッションが動いている間、完了した状態のまま表示を残します。plugin を再起動した後も、transcript に残る TaskCreate / TaskUpdate の記録から組み立て直します。
@@ -32,7 +33,7 @@
 
 ## 必要なもの
 
-- Orca 1.4.246 以上（macOS のデスクトップアプリで確認）
+- Orca 1.4.247 以上（macOS のデスクトップアプリで確認）
 - Claude Code がタスクを作ること。Opus 4.7・Sonnet 4.6 より新しいモデルでは、Claude Code はタスク用のツールを既定で使いません。`~/.claude/settings.json` に次を加えると、新しく起動するセッションから使います。
 
   ```json
@@ -48,7 +49,7 @@
    ```
 
 2. Orca の **Settings → Plugins → ⋯ → Development folders…** で、clone したフォルダーを追加します。
-3. 一覧の「Milestone」で **確認** を押し、有効にします。Node のワーカーを動かすため、フルアクセスの plugin として承認を求められます。host API で使う権限は、ワークスペースの名前・ブランチの読み取りと Agent ステータスの通知です。
+3. 一覧の「Milestone」で **確認** を押し、有効にします。Node のワーカーを動かすため、フルアクセスの plugin として承認を求められます。host API で使う権限は、ワークスペースの名前・ブランチの読み取り、Agent ステータスの通知、行を押したときのワークスペースの表示です。
 4. 右サイドバーの旗アイコンを開きます。パネルを開くとワーカーが起動します。
 
 ## Claude にゴールを書かせる
@@ -77,6 +78,8 @@ flowchart LR
   worker -- "orca worktree ps（イベントのあと・30 秒ごと）" --> orca
   panel["パネル（panel/）"] -- "view.get（開いたとき）" --> worker
   worker -- "view.changed（変わったとき）" --> panel
+  panel -- "workspace.open（行を押したとき）" --> worker
+  worker -- "workspace.list / workspace.open" --> orca
 ```
 
 - パネルの HTML・CSS・スクリプトは `panel/` に置いた固定のファイルです。表示する本文はワーカーが作り、パネルは Orca の通信路（`orca.plugin.request` / `orca.plugin.on`）で受け取ります。
@@ -105,7 +108,7 @@ node scripts/render-sample.mjs /tmp/sample.html          # 通常の表示
 node scripts/render-sample.mjs /tmp/sample-hover.html --hover   # 行にマウスを乗せたとき
 ```
 
-ワーカーのコードを変えたら、Settings → Plugins で Milestone をいったんオフにしてからオンに戻すと、新しいコードで起動します。CI では `engines.orca` と同じ Orca のタグ（v1.4.246）を取得して、manifest を検証します。
+ワーカーのコードを変えたら、Settings → Plugins で Milestone をいったんオフにしてからオンに戻すと、新しいコードで起動します。CI では `engines.orca` に対応する Orca のタグ（v1.4.247）を取得して、manifest を検証します。
 
 ## ライセンス
 
