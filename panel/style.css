@@ -9,8 +9,8 @@
 html.dark { --ms-done: oklch(69.6% 0.17 162.48); --ms-todo: oklch(70.5% 0.213 47.604);
   --ms-working: oklch(79.5% 0.184 86.047); --ms-track: color-mix(in oklch, var(--orca-foreground) 16%, transparent); }
 /* The panel never scrolls as a whole: the focused workspace scrolls by itself, which keeps the other
-   workspaces fixed to the bottom edge however long its list is. */
-body { box-sizing: border-box; display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+   workspaces fixed to the bottom edge however long its list is, and however tall a row grows. */
+body { box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; height: 100vh; overflow: hidden;
   margin: 0; padding: 12px; font: 13px/1.5 system-ui, sans-serif;
   color: var(--orca-foreground); background: var(--orca-background); }
 main { flex: 1 1 0; min-height: 0; overflow: auto; }
@@ -50,12 +50,13 @@ code { font-size: 12px; }
 .row:has(.head:hover), .row:has(.head:focus-visible) { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
 .row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; cursor: pointer; user-select: none; }
 .row .head:focus-visible { outline: 1px solid var(--orca-foreground); outline-offset: -1px; }
-/* Only the head keeps a row open. Leaving it closes the row at once, which puts every row back
-   where it was, so the pointer lands on the row it was heading for. The delay lets the pointer
-   cross a row on its way elsewhere without moving anything. */
-.row .detail { display: grid; grid-template-rows: 0fr; visibility: hidden; pointer-events: none;
-  transition: grid-template-rows 120ms ease-out, visibility 120ms; font-size: 12px; }
-.row .head:hover + .detail, .row .head:focus-visible + .detail { grid-template-rows: 1fr; visibility: visible; transition-delay: 150ms; }
+/* Only the head keeps a row open. Leaving it closes the row, which brings every row back to where
+   it was, so the pointer ends up on the row it was heading for. The delay on opening lets the
+   pointer cross a row on its way elsewhere without moving anything. */
+.row .detail { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; pointer-events: none;
+  transition: grid-template-rows 180ms ease-in-out, opacity 180ms ease-in-out, visibility 180ms; font-size: 12px; }
+.row .head:hover + .detail, .row .head:focus-visible + .detail { grid-template-rows: 1fr; opacity: 1; visibility: visible;
+  transition-delay: 150ms; }
 .row .detail .inner { min-height: 0; max-height: 45vh; overflow: hidden; }
 .row .detail .goal { margin: 4px 0 4px 14px; }
 .row .detail ol { margin: 0 0 4px 14px; }
