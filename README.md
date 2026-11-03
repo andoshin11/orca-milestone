@@ -43,29 +43,16 @@ Claude Code と Codex には、追加の設定は要りません。Orca のタ�
 
 ## インストール
 
-clone したフォルダーを、Orca の開発フォルダーとして読み込みます。`npm install` は要りません。
+1. Orca の **設定 → プラグイン → プラグインを追加 → Git URL から…** を開きます。
+2. 次の URL を入力します。最新のリリースが入ります。
 
-1. clone します。
-
-   ```sh
-   git clone https://github.com/andoshin11/orca-milestone.git
+   ```text
+   https://github.com/andoshin11/orca-milestone
    ```
 
-2. Orca の **設定 → プラグイン → プラグイン設定（⋯）→ 開発フォルダー…** で、clone したフォルダーを追加します。
-3. プラグインの一覧の「Milestone」で **確認** を押し、内容を確かめて有効にします。
+3. 与える権限を確かめて、インストールして有効にします。
 4. 右サイドバーの旗アイコンを開きます。
 5. Orca のターミナルで Claude Code か Codex を新しく起動します。すでに動いているセッションには、起動時の処理が効いていません。
-
-CLI で読み込むこともできます。
-
-```sh
-orca plugin dev load /path/to/orca-milestone
-```
-
-承認が必要なときは、与える権限と fingerprint が表示されます。内容を確かめて、`--approve <fingerprint>` を付けて実行し直します。
-
-> [!NOTE]
-> **プラグインを追加 → Git URL から…** でのインストールは確認していません。タグのない URL では最新のタグ（現在は `v0.3.0`）が入るので、行の移動や Codex 対応などの最近の機能は使えません。
 
 ### 承認する内容
 
@@ -80,11 +67,11 @@ Node のワーカーを動かすので、フルアクセスの plugin として�
 
 ### 更新
 
-clone したフォルダーで `git pull` します。Orca が変更を読み込みます。使う権限が増えたときは、もう一度承認を求められることがあります。動いているセッションには、起動時の処理の変更は効きません。
+プラグインの一覧の Milestone で **アップデートを確認** を押します。プラグイン設定（⋯）の **プラグインを自動でアップデート** をオンにすると自動で更新され、新しい権限が増えたときだけ確認を求められます。動いているセッションには、起動時の処理の変更は効きません。
 
 ### アンインストール
 
-**開発フォルダー…** からフォルダーを外すか、`orca plugin dev unload /path/to/orca-milestone` を実行します。Codex の進捗ファイルを置く `~/.orca-milestone/` は残るので、不要なら削除してください。
+プラグインの一覧の Milestone で **削除…** を選びます。Codex の進捗ファイルを置く `~/.orca-milestone/` は残るので、不要なら削除してください。
 
 ## Claude にゴールを書かせる（任意）
 
@@ -152,6 +139,16 @@ flowchart LR
 - Codex の MCP サーバーは、Orca 自身のバイナリを Node として動かすので、Node のインストールは要りません。Codex のセッションごとに 1 つ起動し、親である Codex のプロセス ID を付けたファイルに進捗を書きます。ワーカーはそのプロセスが終わるとファイルを消します。
 
 ## 開発
+
+clone したフォルダーを開発フォルダーとして読み込むと、変更がすぐ反映されます。同じ plugin をインストールしていても、開発フォルダーのほうが優先されます。
+
+```sh
+git clone https://github.com/andoshin11/orca-milestone.git
+orca plugin dev load /path/to/orca-milestone   # 承認が必要なときは、内容を確かめて --approve <fingerprint> を付けて実行し直す
+orca plugin dev unload /path/to/orca-milestone # 外す
+```
+
+テストと manifest の検証は次のとおりです。
 
 ```sh
 npm ci
