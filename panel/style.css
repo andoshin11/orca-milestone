@@ -43,8 +43,9 @@ code { font-size: 12px; }
 .rows { margin: 0; padding: 0; list-style: none; }
 .row { display: block; position: relative; padding: 0; }
 .row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; }
-.row.has-detail .head { cursor: pointer; }
-.row.has-detail:hover .head { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
+.row .head { cursor: pointer; }
+.row:hover .head { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
+.row .head:focus-visible { outline: 1px solid var(--orca-foreground); outline-offset: -1px; }
 /* The detail floats above its row, over the empty middle of the panel, so nothing moves. */
 .row .detail { display: none; position: absolute; left: -6px; right: -6px; bottom: 100%; z-index: 1;
   max-height: 60vh; overflow: auto; padding: 8px 10px; font-size: 12px;

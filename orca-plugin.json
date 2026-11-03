@@ -10,7 +10,7 @@
   "author": { "name": "andoshin11", "url": "https://github.com/andoshin11" },
   "repository": "https://github.com/andoshin11/orca-milestone",
   "license": "MIT",
-  "engines": { "orca": ">=1.4.246" },
+  "engines": { "orca": ">=1.4.248" },
   "pluginApi": 1,
   "main": "main.mjs",
   "contributes": {
@@ -18,5 +18,5 @@
     "commands": [{ "id": "milestone.refresh", "title": "Milestone: Refresh" }],
     "events": [{ "on": "agent.status.changed" }, { "on": "workspace.changed" }]
   },
-  "capabilities": [{ "kind": "workspace:read" }, { "kind": "agent:read" }]
+  "capabilities": [{ "kind": "workspace:read" }, { "kind": "agent:read" }, { "kind": "workspace:write" }]
 }

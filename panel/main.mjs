@@ -2,6 +2,7 @@
 // Orca recreates the panel when its sidebar tab is switched, and nothing is posted while it is
 // closed, so every open asks again. Asking again while open also keeps the worker from being
 // stopped as idle, which would end its watch on the task lists.
+import { openOnPress } from './open.mjs'
 import { patchChildren } from './patch.mjs'
 
 const RETRY_MS = 3000
@@ -31,6 +32,12 @@ async function load() {
     if (!loaded) setTimeout(load, RETRY_MS)
   }
 }
+
+openOnPress(document.body, (path) => {
+  plugin.request('workspace.open', { path }).catch((error) => {
+    console.warn(`milestone: workspace.open failed: ${error.code ?? error.message}`)
+  })
+})
 
 void load()
 setInterval(load, KEEP_ALIVE_MS)

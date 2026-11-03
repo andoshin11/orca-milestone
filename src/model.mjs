@@ -38,6 +38,7 @@ function buildOthers(agents, sessions) {
     const counts = session ? progress(session.tasks) : { done: 0, total: 0, tasks: [] }
     return {
       workspace: entry.workspace,
+      path: entry.path,
       repo: entry.repo ?? null,
       focused: entry.focused,
       kind: entry.needsUser ? 'attention' : 'idle',

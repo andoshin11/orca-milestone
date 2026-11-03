@@ -150,6 +150,23 @@ export function createMilestoneWorker({
     return { html: lastHtml ?? renderBody({ kind: 'no-workspace' }) }
   }
 
+  /** Shows the workspace at a path. A pressed row may be stale by now, so a miss is only logged. */
+  async function openWorkspace(path) {
+    try {
+      const { workspaces } = await orca.host.call('workspace.list')
+      const target = workspaces.find((candidate) => candidate.path === path)
+      if (!target) {
+        orca.log(`milestone: no workspace to open at ${path}`)
+        return { opened: false }
+      }
+      await orca.host.call('workspace.open', { workspaceId: target.id })
+      return { opened: true }
+    } catch (error) {
+      orca.log(`milestone: could not open the workspace: ${error.message}`)
+      return { opened: false }
+    }
+  }
+
   async function refreshOnce(askOrca) {
     if (askOrca || !workspace) {
       try {
@@ -213,5 +230,5 @@ export function createMilestoneWorker({
     return started
   }
 
-  return { start, refresh, schedule, agentChanged, view }
+  return { start, refresh, schedule, agentChanged, view, openWorkspace }
 }

@@ -62,11 +62,12 @@ function renderRow(row) {
       : '<span class="dot"></span>'
   const head = `<div class="top">${mark}<span class="name">${escape(row.workspace)}${repo}</span>${badge}${of}</div>${bar}`
   const key = escape(`${row.workspace}\n${row.repo ?? ''}\n${clip(row.goal ?? '', GOAL_MAX)}`)
-  if (row.total === 0) return `<li class="row ${row.kind}" data-key="${key}"><div class="head">${head}</div></li>`
+  const button = `<div class="head" role="button" tabindex="0" data-open="${escape(row.path)}">${head}</div>`
+  if (row.total === 0) return `<li class="row ${row.kind}" data-key="${key}">${button}</li>`
   // Hovering a row shows its goal and tasks; plain CSS, so it needs no script.
   const goal = row.goal ? `<p class="goal">${escape(clip(row.goal, GOAL_MAX))}</p>` : ''
   const title = `<div class="title"><b>${escape(row.workspace)}</b>${repo}<span class="of">${row.done} / ${row.total}</span></div>`
-  return `<li class="row ${row.kind} has-detail" data-key="${key}"><div class="head">${head}</div>
+  return `<li class="row ${row.kind} has-detail" data-key="${key}">${button}
 <div class="detail">${title}${goal}<ol>${row.tasks.map(renderTask).join('')}</ol></div></li>`
 }
 
