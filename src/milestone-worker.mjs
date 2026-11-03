@@ -32,7 +32,7 @@ export function createMilestoneWorker({
   home,
   cli,
   readOrca = readWorkspaces,
-  switchTo = openWorkspace,
+  switchWorkspace = openWorkspace,
   now = Date.now,
   watchDir = (dir, onChange) => watch(dir, { recursive: true }, onChange)
 }) {
@@ -202,7 +202,7 @@ export function createMilestoneWorker({
     schedule(true)
   }
 
-  async function open(input) {
+  async function openWorkspace(input) {
     const candidates = agents.filter((agent) => agent.path === input?.path)
     if (candidates.length === 0) {
       throw Object.assign(new Error('unknown workspace'), { code: 'unknown_workspace' })
@@ -211,7 +211,7 @@ export function createMilestoneWorker({
       candidates.find((a) => NEEDS_USER.has(a.state)) ??
       candidates.find((a) => a.state === 'working') ??
       candidates[0]
-    await switchTo(cli, { path: agent.path, paneKey: agent.paneKey })
+    await switchWorkspace(cli, { path: agent.path, paneKey: agent.paneKey })
     schedule(true)
     return { ok: true }
   }
@@ -228,5 +228,5 @@ export function createMilestoneWorker({
     return started
   }
 
-  return { start, refresh, schedule, agentChanged, view, open }
+  return { start, refresh, schedule, agentChanged, view, openWorkspace }
 }

@@ -14,7 +14,7 @@ export default function activate(orca) {
   orca.panels.handle('view.get', () => worker.view())
   orca.panels.handle('workspace.open', async (input) => {
     await worker.start()
-    return worker.open(input)
+    return worker.openWorkspace(input)
   })
   orca.commands.register('milestone.refresh', async () => {
     await worker.start()

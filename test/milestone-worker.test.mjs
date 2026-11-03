@@ -287,13 +287,13 @@ test('open moves Orca to a listed workspace, onto the agent that needs the user 
         { workspace: 'other', path: '/work/other', paneKey: 't2:l2', state: 'waiting' }
       ]
     }),
-    switchTo: async (cli, target) => switches.push({ cli, ...target }),
+    switchWorkspace: async (cli, target) => switches.push({ cli, ...target }),
     watchDir: () => {}
   })
 
   await worker.refresh(true)
-  assert.deepEqual(await worker.open({ path: '/work/other' }), { ok: true })
+  assert.deepEqual(await worker.openWorkspace({ path: '/work/other' }), { ok: true })
   assert.deepEqual(switches, [{ cli: 'orca', path: '/work/other', paneKey: 't2:l2' }])
-  await assert.rejects(worker.open({ path: '/etc' }), { code: 'unknown_workspace' })
+  await assert.rejects(worker.openWorkspace({ path: '/etc' }), { code: 'unknown_workspace' })
   assert.equal(switches.length, 1)
 })
