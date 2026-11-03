@@ -8,9 +8,12 @@
   --ms-working: oklch(68.1% 0.162 75.834); --ms-track: color-mix(in oklch, var(--orca-foreground) 12%, transparent); }
 html.dark { --ms-done: oklch(69.6% 0.17 162.48); --ms-todo: oklch(70.5% 0.213 47.604);
   --ms-working: oklch(79.5% 0.184 86.047); --ms-track: color-mix(in oklch, var(--orca-foreground) 16%, transparent); }
-body { box-sizing: border-box; display: flex; flex-direction: column; min-height: 100vh;
+/* The panel never scrolls as a whole: the focused workspace scrolls by itself, which keeps the other
+   workspaces fixed to the bottom edge however long its list is, and however tall a row grows. */
+body { box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; height: 100vh; overflow: hidden;
   margin: 0; padding: 12px; font: 13px/1.5 system-ui, sans-serif;
   color: var(--orca-foreground); background: var(--orca-background); }
+main { flex: 1 1 0; min-height: 0; overflow: auto; }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 h1 { margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent { flex: none; font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
@@ -36,28 +39,29 @@ li.completed .strike { background-size: 100% 1px; }
 li.in_progress { font-weight: 600; }
 .empty { color: var(--orca-muted-foreground); }
 code { font-size: 12px; }
-.others { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--orca-border); }
+.others { flex: none; padding-top: 12px; border-top: 1px solid var(--orca-border); }
 .others h2 { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 6px;
   font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
 .others h2 .attention { color: var(--ms-todo); }
 .rows { margin: 0; padding: 0; list-style: none; }
-.row { display: block; position: relative; padding: 0; }
-.row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; }
-.row .head { cursor: pointer; }
-.row:hover .head { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
+/* Reversed, so a row grows upward from its head. The rows are anchored to the bottom edge, so the
+   head stays under the pointer and the rows above slide up. */
+.row { display: flex; flex-direction: column-reverse; gap: 0; padding: 0 6px; margin: 0 -6px; border-radius: 4px; }
+.row:has(.head:hover), .row:has(.head:focus-visible) { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
+.row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; cursor: pointer; user-select: none; }
 .row .head:focus-visible { outline: 1px solid var(--orca-foreground); outline-offset: -1px; }
-/* The detail floats above its row, over the empty middle of the panel, so nothing moves. */
-.row .detail { display: none; position: absolute; left: -6px; right: -6px; bottom: 100%; z-index: 1;
-  max-height: 60vh; overflow: auto; padding: 8px 10px; font-size: 12px;
-  border: 1px solid var(--orca-border); border-radius: var(--orca-radius, 6px);
-  background: var(--orca-card); color: var(--orca-card-foreground); box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); }
-.row:hover .detail { display: block; }
-.row .detail .goal { margin: 0 0 4px; }
-.row .detail .title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; padding-bottom: 6px;
-  border-bottom: 1px solid var(--orca-border); }
-.row .detail .title b { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.row .detail .title .repo { margin-left: 0; }
-.row .detail .title .of { flex: none; }
+/* Only the head keeps a row open. Leaving it closes the row, which brings every row back to where
+   it was, so the pointer ends up on the row it was heading for. The delay on opening lets the
+   pointer cross a row on its way elsewhere without moving anything. */
+.row .detail { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; pointer-events: none;
+  transition: grid-template-rows 180ms ease-in-out, opacity 180ms ease-in-out, visibility 180ms; font-size: 12px; }
+.row .head:hover + .detail, .row .head:focus-visible + .detail { grid-template-rows: 1fr; opacity: 1; visibility: visible;
+  transition-delay: 150ms; }
+.row .detail .inner { min-height: 0; max-height: 45vh; overflow: hidden; }
+.row .detail .goal { margin: 4px 0 4px 14px; }
+.row .detail ol { margin: 0 0 4px 14px; }
+.row .detail li { gap: 6px; }
+.row .detail li.more { color: var(--orca-muted-foreground); }
 .row .top { display: flex; align-items: center; gap: 6px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
 .row.attention .dot, .row .dot.running { background: var(--ms-todo); }
@@ -70,5 +74,5 @@ code { font-size: 12px; }
 .row .of { flex: none; font-size: 11px; color: var(--ms-done); }
 .row .bar { height: 4px; margin: 4px 0 0 14px; }
 @media (prefers-reduced-motion: reduce) {
-  .bar > div, li, li .mark, li .strike { transition: none; }
+  .bar > div, li, li .mark, li .strike, .row .detail { transition: none; }
 }

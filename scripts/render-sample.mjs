@@ -2,7 +2,7 @@
 //
 //   node scripts/render-sample.mjs <out.html> [--hover]
 //
-// The page wraps the panel in a sandboxed frame, with the design tokens of Orca's dark theme. --hover shows the detail of one other workspace, as a hover would.
+// The page wraps the panel in a sandboxed frame, with the design tokens of Orca's dark theme. --hover expands one other workspace, as a hover would.
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { buildModel } from '../src/model.mjs'
@@ -89,8 +89,8 @@ const model = buildModel(
 
 // Which row to open for --hover: the second one, a workspace with unfinished tasks.
 const hover = flag === '--hover'
-  ? '<style>.row.has-detail:nth-child(2) .detail{display:block}' +
-    '.row.has-detail:nth-child(2) .head{background:color-mix(in oklch,#fafafa 7%,transparent)}</style>'
+  ? '<style>.row.has-detail:nth-child(2) .detail{grid-template-rows:1fr;visibility:visible}' +
+    '.row.has-detail:nth-child(2){background:color-mix(in oklch,#fafafa 7%,transparent)}</style>'
   : ''
 const style = await readFile(join(import.meta.dirname, '..', 'panel', 'style.css'), 'utf8')
 const panel =

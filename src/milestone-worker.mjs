@@ -1,6 +1,6 @@
 // Keeps the panel in step with the focused workspace, Claude's task lists and the state of every
 // Claude agent Orca runs. The worker renders the body of the panel and posts it; the panel patches
-// its DOM, so an update keeps the frame, the scroll position and a row's open detail.
+// its DOM, so an update keeps the frame, the scroll position and a row's expansion.
 import { watch } from 'node:fs'
 import { mkdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'

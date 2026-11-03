@@ -101,9 +101,9 @@ test('other workspaces list those needing the user first, then unfinished and fi
   assert.equal(html.match(/role="button"/g).length, 5)
   assert.ok(html.includes('data-open="/work/allow"'))
   assert.ok(renderBody(buildModel(workspace, [], [agent('a"b', 'waiting', 1)])).includes('data-open="/work/a&quot;b"'))
-  // Rows with tasks show their goal and tasks on hover; rows without have none.
+  // Rows with tasks expand to their goal and tasks on hover; rows without have nothing to expand.
   assert.equal(html.match(/<div class="detail">/g).length, 4)
-  assert.ok(html.includes('<div class="detail"><div class="title"><b>question</b><span class="repo">repo-x</span><span class="of">1 / 2</span></div>'))
+  assert.ok(html.includes('<div class="detail"><div class="inner"><p class="goal">Goal question</p><ol>'))
   assert.ok(html.includes('<p class="goal">Goal question</p>'))
   assert.ok(!html.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))
   // At work: only the row with an agent working that needs nothing from the user.
@@ -119,4 +119,28 @@ test('a list keeps its key while its tasks progress, and gets another with a new
   assert.equal(keyOf(render('Goal', 'pending')), keyOf(render('Goal', 'completed')))
   assert.notEqual(keyOf(render('Goal', 'pending')), keyOf(render('Other goal', 'pending')))
   assert.ok(render('"quoted" <goal>', 'pending').includes('&quot;quoted&quot; &lt;goal&gt;'))
+})
+
+test('an expanded row folds a long list: finished tasks become one line and the rest is capped', () => {
+  const row = (tasks) => renderBody(buildModel(workspace, [
+    { listId: 'x', cwd: '/work/x', goal: 'G', updatedAt: 1, tasks }
+  ], [{ workspace: 'x', path: '/work/x', focused: false, state: 'working', since: 1 }]))
+  const many = (done, left) => [
+    ...Array.from({ length: done }, (_, i) => task(i + 1, `done${i}`, 'completed')),
+    ...Array.from({ length: left }, (_, i) => task(done + i + 1, `left${i}`, 'pending'))
+  ]
+
+  const short = row(many(7, 1))
+  assert.ok(short.includes('done0') && short.includes('left0'), 'a short list shows every task')
+  assert.ok(!short.includes('完了 7 件'))
+
+  const long = row(many(38, 2))
+  assert.ok(long.includes('完了 38 件'))
+  assert.ok(!long.includes('done0'))
+  assert.ok(long.includes('left1'))
+  assert.ok(!long.includes('class="more"'))
+
+  const capped = row(many(1, 11))
+  assert.ok(capped.includes('left7') && !capped.includes('left8'))
+  assert.ok(capped.includes('ほか 3 件'))
 })

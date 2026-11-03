@@ -1,6 +1,5 @@
 // Opens the workspace of a pressed row. The listener sits on the root, so it keeps working however
-// the rows are patched. Only a row's head carries data-open, which leaves its hover detail free to
-// be scrolled and selected.
+// the rows are patched. Only a row's head carries data-open, the part that keeps the row expanded.
 
 export function openOnPress(root, open) {
   root.addEventListener('click', (event) => {
