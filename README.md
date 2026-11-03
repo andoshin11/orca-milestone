@@ -3,7 +3,7 @@
 [Orca](https://github.com/stablyai/orca) の plugin です。フォーカス中のワークスペースで Claude Code が進めているタスクを、ゴールまでのマイルストーンとして右サイドバーに表示します。タスクが進むと、すぐに表示が変わります。
 
 > [!WARNING]
-> Orca の plugin 機能は Alpha です。この plugin は Orca 1.4.248 以上を対象にしています。
+> Orca の plugin 機能は Alpha です。この plugin は Orca 1.4.247 以上を対象にしています。
 
 <p>
   <img src="docs/images/panel.png" width="300" alt="Milestones パネル。上部にフォーカス中のワークスペースのゴールとタスク、下端にほかのワークスペースの進捗が並ぶ">
@@ -35,7 +35,7 @@
 
 ## 必要なもの
 
-- Orca 1.4.248 以上（macOS のデスクトップアプリで確認）
+- Orca 1.4.247 以上（macOS のデスクトップアプリで確認）
 - Claude Code がタスクを作ること。Opus 4.7・Sonnet 4.6 より新しいモデルでは、Claude Code はタスク用のツールを既定で使いません。`~/.claude/settings.json` に次を加えると、新しく起動するセッションから使います。
 
   ```json
