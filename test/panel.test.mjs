@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { JSDOM } from 'jsdom'
+import { scrollExpandedRows } from '../panel/expand.mjs'
 import { openOnPress } from '../panel/open.mjs'
 import { patchChildren } from '../panel/patch.mjs'
 
@@ -92,4 +93,28 @@ test('pressing a row head opens its workspace, also after a patch, but its detai
   press(' ')
   press('a')
   assert.equal(opened.length, 4)
+})
+
+test('the wheel over a head scrolls its tasks, and opening starts at what is left', () => {
+  const root = body(
+    '<li class="row"><div class="head"><span class="name">app</span></div><div class="detail"><div class="inner"><ol><li class="completed">a</li><li class="pending">b</li></ol></div></div></li><li class="row"><div class="head"><span class="name">bare</span></div></li>'
+  )
+  scrollExpandedRows(root)
+  const { MouseEvent, WheelEvent } = root.ownerDocument.defaultView
+  const inner = root.querySelector('.inner')
+  root.querySelector('li.pending').getBoundingClientRect = () => ({ top: 300 })
+  inner.getBoundingClientRect = () => ({ top: 100 })
+
+  const enter = (from) => root.querySelector('.name').dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: from }))
+  enter(root.ownerDocument.body)
+  assert.equal(inner.scrollTop, 176, 'the task left, with a little of what came before it')
+
+  enter(inner)
+  assert.equal(inner.scrollTop, 176, 'coming back from its own tasks does not jump')
+
+  root.querySelector('.name').dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }))
+  assert.equal(inner.scrollTop, 216)
+
+  root.querySelectorAll('.name')[1].dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }))
+  assert.equal(inner.scrollTop, 216, 'a row with no tasks has nothing to scroll')
 })

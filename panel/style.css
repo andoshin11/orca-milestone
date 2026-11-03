@@ -47,21 +47,22 @@ code { font-size: 12px; }
 /* Reversed, so a row grows upward from its head. The rows are anchored to the bottom edge, so the
    head stays under the pointer and the rows above slide up. */
 .row { display: flex; flex-direction: column-reverse; gap: 0; padding: 0 6px; margin: 0 -6px; border-radius: 4px; }
-.row:has(.head:hover), .row:has(.head:focus-visible) { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
+.row:has(.head:hover), .row:has(.head:focus-visible), .row.long:has(.detail:hover) { background: color-mix(in oklch, var(--orca-foreground) 7%, transparent); }
 .row .head { display: block; padding: 4px 6px; margin: 0 -6px; border-radius: 4px; cursor: pointer; user-select: none; }
 .row .head:focus-visible { outline: 1px solid var(--orca-foreground); outline-offset: -1px; }
-/* Only the head keeps a row open. Leaving it closes the row, which brings every row back to where
-   it was, so the pointer ends up on the row it was heading for. The delay on opening lets the
-   pointer cross a row on its way elsewhere without moving anything. */
+/* The head keeps a row open. Leaving it closes the row, which brings every row back to where it
+   was, so the pointer ends up on the row it was heading for. A long list is the exception: the
+   pointer may enter it to scroll. The delay on opening lets the pointer cross a row on its way
+   elsewhere without moving anything. */
 .row .detail { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; pointer-events: none;
   transition: grid-template-rows 180ms ease-in-out, opacity 180ms ease-in-out, visibility 180ms; font-size: 12px; }
-.row .head:hover + .detail, .row .head:focus-visible + .detail { grid-template-rows: 1fr; opacity: 1; visibility: visible;
+.row.long .detail { pointer-events: auto; }
+.row .head:hover + .detail, .row .head:focus-visible + .detail, .row.long .detail:hover { grid-template-rows: 1fr; opacity: 1; visibility: visible;
   transition-delay: 150ms; }
-.row .detail .inner { min-height: 0; max-height: 45vh; overflow: hidden; }
+.row .detail .inner { min-height: 0; max-height: 45vh; overflow: hidden auto; overscroll-behavior: contain; }
 .row .detail .goal { margin: 4px 0 4px 14px; }
 .row .detail ol { margin: 0 0 4px 14px; }
 .row .detail li { gap: 6px; }
-.row .detail li.more { color: var(--orca-muted-foreground); }
 .row .top { display: flex; align-items: center; gap: 6px; }
 .row .dot { flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--orca-muted-foreground); }
 .row.attention .dot, .row .dot.running { background: var(--ms-todo); }
