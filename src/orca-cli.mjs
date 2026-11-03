@@ -57,9 +57,24 @@ export async function readWorkspaces(cli) {
         repo: typeof worktree.repo === 'string' ? worktree.repo : null,
         path: worktree.path,
         focused: Boolean(worktree.isActive),
+        paneKey: agent.paneKey,
         state: agent.state,
         since: agent.stateStartedAt ?? null
       }))
     )
+  }
+}
+
+export async function openWorkspace(cli, { path, paneKey }) {
+  const listed = await run(cli, ['terminal', 'list', '--worktree', `path:${path}`, '--json'])
+  if (!listed?.ok) {
+    throw new Error(listed?.error?.message ?? 'orca terminal list failed')
+  }
+  const terminals = listed.result.terminals
+  const terminal = terminals.find((t) => `${t.tabId}:${t.leafId}` === paneKey) ?? terminals[0]
+  if (!terminal) throw new Error(`no terminal in ${path}`)
+  const switched = await run(cli, ['terminal', 'switch', '--terminal', terminal.handle, '--json'])
+  if (!switched?.ok) {
+    throw new Error(switched?.error?.message ?? 'orca terminal switch failed')
   }
 }

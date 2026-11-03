@@ -272,3 +272,28 @@ test('an agent event asks Orca again only when that pane changed state', async (
   await settle()
   assert.equal(asked, 3, 'the main agent of a pane counts too')
 })
+
+test('open moves Orca to a listed workspace, onto the agent that needs the user first', async () => {
+  const home = await makeHome()
+  const switches = []
+  const worker = createMilestoneWorker({
+    orca: fakeOrca(),
+    home,
+    cli: 'orca',
+    readOrca: async () => ({
+      active: { path: '/work/app', displayName: 'app', claudeStates: [] },
+      agents: [
+        { workspace: 'other', path: '/work/other', paneKey: 't1:l1', state: 'done' },
+        { workspace: 'other', path: '/work/other', paneKey: 't2:l2', state: 'waiting' }
+      ]
+    }),
+    switchTo: async (cli, target) => switches.push({ cli, ...target }),
+    watchDir: () => {}
+  })
+
+  await worker.refresh(true)
+  assert.deepEqual(await worker.open({ path: '/work/other' }), { ok: true })
+  assert.deepEqual(switches, [{ cli: 'orca', path: '/work/other', paneKey: 't2:l2' }])
+  await assert.rejects(worker.open({ path: '/etc' }), { code: 'unknown_workspace' })
+  assert.equal(switches.length, 1)
+})

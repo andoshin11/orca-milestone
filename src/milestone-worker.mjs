@@ -16,8 +16,8 @@ import {
   readTaskList,
   readTranscriptHead
 } from './claude-sessions.mjs'
-import { buildModel } from './model.mjs'
-import { readWorkspaces } from './orca-cli.mjs'
+import { buildModel, NEEDS_USER } from './model.mjs'
+import { openWorkspace, readWorkspaces } from './orca-cli.mjs'
 import { renderBody } from './render.mjs'
 
 const TASK_LIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -32,6 +32,7 @@ export function createMilestoneWorker({
   home,
   cli,
   readOrca = readWorkspaces,
+  switchTo = openWorkspace,
   now = Date.now,
   watchDir = (dir, onChange) => watch(dir, { recursive: true }, onChange)
 }) {
@@ -201,6 +202,20 @@ export function createMilestoneWorker({
     schedule(true)
   }
 
+  async function open(input) {
+    const candidates = agents.filter((agent) => agent.path === input?.path)
+    if (candidates.length === 0) {
+      throw Object.assign(new Error('unknown workspace'), { code: 'unknown_workspace' })
+    }
+    const agent =
+      candidates.find((a) => NEEDS_USER.has(a.state)) ??
+      candidates.find((a) => a.state === 'working') ??
+      candidates[0]
+    await switchTo(cli, { path: agent.path, paneKey: agent.paneKey })
+    schedule(true)
+    return { ok: true }
+  }
+
   function start() {
     started ??= (async () => {
       await mkdir(tasksRoot, { recursive: true })
@@ -213,5 +228,5 @@ export function createMilestoneWorker({
     return started
   }
 
-  return { start, refresh, schedule, agentChanged, view }
+  return { start, refresh, schedule, agentChanged, view, open }
 }

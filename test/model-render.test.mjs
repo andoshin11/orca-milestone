@@ -105,6 +105,8 @@ test('other workspaces list those needing the user first, then unfinished and fi
   // At work: only the row with an agent working that needs nothing from the user.
   assert.deepEqual(model.others.rows.filter((row) => row.working).map((row) => row.workspace), ['newer'])
   assert.equal(html.match(/<span class="working">作業中<\/span>/g).length, 1)
+  assert.equal(html.match(/<a class="head" href="#" data-open="\/work\/[a-z]+">/g).length, 5)
+  assert.ok(html.includes('<a class="head" href="#" data-open="/work/allow">'))
   assert.equal(renderBody(model), html)
 })
 

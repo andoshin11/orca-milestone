@@ -32,5 +32,14 @@ async function load() {
   }
 }
 
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('[data-open]')
+  if (!link) return
+  event.preventDefault()
+  plugin.request('workspace.open', { path: link.dataset.open }).catch((error) => {
+    console.warn(`milestone: workspace.open failed: ${error.code ?? error.message}`)
+  })
+})
+
 void load()
 setInterval(load, KEEP_ALIVE_MS)

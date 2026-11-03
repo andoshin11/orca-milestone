@@ -14,7 +14,7 @@ function progress(tasks) {
 }
 
 // An agent needs the user when it asks for input or for a permission.
-const NEEDS_USER = new Set(['waiting', 'blocked', 'permission'])
+export const NEEDS_USER = new Set(['waiting', 'blocked', 'permission'])
 
 /**
  * The other workspaces where Claude needs the user or has a task list, each with the progress
@@ -38,6 +38,7 @@ function buildOthers(agents, sessions) {
     const counts = session ? progress(session.tasks) : { done: 0, total: 0, tasks: [] }
     return {
       workspace: entry.workspace,
+      path: entry.path,
       repo: entry.repo ?? null,
       focused: entry.focused,
       kind: entry.needsUser ? 'attention' : 'idle',
