@@ -1,6 +1,6 @@
 # orca-milestone
 
-[Orca](https://github.com/stablyai/orca) の plugin です。フォーカス中のワークスペースで Claude Code が進めているタスクを、ゴールまでのマイルストーンとして右サイドバーに表示します。タスクが進むと、すぐに表示が変わります。
+[Orca](https://github.com/stablyai/orca) の plugin です。フォーカス中のワークスペースで Claude Code や Codex が進めているタスクを、ゴールまでのマイルストーンとして右サイドバーに表示します。タスクが進むと、すぐに表示が変わります。
 
 > [!WARNING]
 > Orca の plugin 機能は Alpha です。この plugin は Orca 1.4.247 以上を対象にしています。
@@ -29,7 +29,10 @@
   - 行をクリックしてそのワークスペースへ移ることはできません（パネルから Orca を操作する API がないため）。
 - タスク一覧は、その Claude セッションが動いている間だけ表示します。セッションを終了したり、ワークスペースを削除したりすると消えます。動いているセッションは、Claude が `~/.claude/sessions/<pid>.json` に書く情報で判断します。
 - Claude はすべてのタスクを完了するとタスク一覧のファイルを消しますが、この plugin はセッションが動いている間、完了した状態のまま表示を残します。plugin を再起動した後も、transcript に残る TaskCreate / TaskUpdate の記録から組み立て直します。
-- 対象は Claude Code だけです。Orca の Agent Teams で起動した Claude（`claude --teammate-mode`）にも対応しています。
+- 対象は Claude Code と Codex です。Orca の Agent Teams で起動した Claude（`claude --teammate-mode`）にも対応しています。
+- Codex にはタスク一覧の機能がないので、Orca のターミナルで新しく起動するときに、進捗を記録する MCP ツール（`update_progress`）と、その使い方の指示をそのセッションだけに足します。記録は `~/.orca-milestone/progress/` に置かれ、セッションが終わると消えます。
+  - `~/.codex` の設定は変更しません。`config.toml` に `developer_instructions` を設定している場合は、Orca から起動したセッションではこの plugin の指示に置き換わります。
+  - 保存したセッションの再開や Orca の外で起動した Codex には足されません。ツールを使うかどうかは Codex の判断なので、短い作業では記録されないこともあります。
 
 ## 必要なもの
 
@@ -79,6 +82,9 @@ flowchart LR
   panel["パネル（panel/）"] -- "view.get（開いたとき）" --> worker
   worker -- "view.changed（変わったとき）" --> panel
   panel -- "workspace.open（行を押したとき）" --> worker
+  codex["Codex"] -- "update_progress（MCP）" --> mcp["src/progress-server.mjs"]
+  mcp -- "進捗ファイル" --> worker
+  orca -- "agent.launch.before（起動の直前）" --> worker
   worker -- "workspace.list / workspace.open" --> orca
 ```
 

@@ -1,4 +1,4 @@
-// Turns the focused workspace and the Claude sessions found on disk into what the panel shows.
+// Turns the focused workspace and the agent sessions found on disk into what the panel shows.
 
 const MAX_SESSIONS = 3
 const MAX_ROWS = 8
@@ -71,9 +71,9 @@ function buildOthers(agents, sessions) {
 }
 
 /**
- * @param workspace { path, displayName, claudeStates } of the focused workspace, or null
+ * @param workspace { path, displayName, agentStates } of the focused workspace, or null
  * @param sessions  [{ listId, cwd, goal, tasks, updatedAt }] of every workspace, newest first
- * @param agents    [{ workspace, repo, path, focused, state, since }] Orca runs, one per Claude agent
+ * @param agents    [{ workspace, repo, path, focused, state, since }] Orca runs, one per Claude or Codex agent
  */
 export function buildModel(workspace, sessions, agents = []) {
   const others = buildOthers(agents, sessions)
@@ -83,7 +83,7 @@ export function buildModel(workspace, sessions, agents = []) {
     .filter((session) => session.tasks.length > 0)
     .slice(0, MAX_SESSIONS)
     .map((session) => ({ listId: session.listId, goal: session.goal, ...progress(session.tasks) }))
-  const states = workspace.claudeStates ?? []
+  const states = workspace.agentStates ?? []
   return {
     kind: mine.length > 0 ? 'sessions' : 'no-tasks',
     workspace: workspace.displayName,

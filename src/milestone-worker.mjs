@@ -1,5 +1,5 @@
-// Keeps the panel in step with the focused workspace, Claude's task lists and the state of every
-// Claude agent Orca runs. The worker renders the body of the panel and posts it; the panel patches
+// Keeps the panel in step with the focused workspace, the task lists of Claude and Codex and the
+// state of every agent Orca runs. The worker renders the body of the panel and posts it; the panel patches
 // its DOM, so an update keeps the frame, the scroll position and a row's expansion.
 import { watch } from 'node:fs'
 import { mkdir, stat } from 'node:fs/promises'
@@ -16,8 +16,10 @@ import {
   readTaskList,
   readTranscriptHead
 } from './claude-sessions.mjs'
+import { readCodexProgress } from './codex-progress.mjs'
 import { buildModel } from './model.mjs'
 import { readWorkspaces } from './orca-cli.mjs'
+import { progressDir } from './progress-server.mjs'
 import { renderBody } from './render.mjs'
 
 const TASK_LIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -37,6 +39,7 @@ export function createMilestoneWorker({
 }) {
   const paths = claudePaths(home)
   const { tasksRoot } = paths
+  const progressRoot = progressDir(home)
   // Transcript heads never change once written; null entries are retried on the next refresh.
   const heads = new Map()
   // The request a list was made for, keyed by list and the subject of its first task.
@@ -125,7 +128,8 @@ export function createMilestoneWorker({
       if (!head?.cwd) continue
       sessions.push({ ...list, cwd: head.cwd, ...(await goalOf(list.listId, head, tasks)) })
     }
-    return sessions
+    sessions.push(...(await readCodexProgress(progressRoot)))
+    return sessions.sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
   function currentTasks(listId, tasks) {
@@ -221,9 +225,11 @@ export function createMilestoneWorker({
   function start() {
     started ??= (async () => {
       await mkdir(tasksRoot, { recursive: true })
+      await mkdir(progressRoot, { recursive: true })
       watchDir(tasksRoot, (_event, name) => {
         if (name && !String(name).endsWith('.lock')) schedule()
       })
+      watchDir(progressRoot, () => schedule())
       setInterval(() => schedule(true), SYNC_MS)
       await refresh(true)
     })()

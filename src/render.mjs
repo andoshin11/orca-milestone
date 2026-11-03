@@ -87,12 +87,12 @@ export function renderBody(model) {
 
 function renderFocused(model) {
   if (model.kind === 'no-workspace') {
-    return '<p class="empty">ワークスペースを開くと、Claude の進捗をここに表示します。</p>'
+    return '<p class="empty">ワークスペースを開くと、エージェントの進捗をここに表示します。</p>'
   }
   const agent = AGENT_LABELS[model.agent] ?? ''
   const header = `<header><h1>${escape(model.workspace)}</h1><span class="agent ${model.agent}">${agent}</span></header>`
   if (model.kind === 'no-tasks') {
-    return `${header}<p class="empty">このワークスペースの Claude はまだタスクを作っていません。</p>`
+    return `${header}<p class="empty">このワークスペースのエージェントはまだタスクを作っていません。</p>`
   }
   return header + model.sessions.map(renderSession).join('')
 }
