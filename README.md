@@ -34,7 +34,7 @@
 ## 必要なもの
 
 - Orca 1.4.247 以上（macOS のデスクトップアプリで確認）
-- Claude Code がタスクを作ること。Opus 4.7・Sonnet 4.6 より新しいモデルでは、Claude Code はタスク用のツールを既定で使いません。`~/.claude/settings.json` に次を加えると、新しく起動するセッションから使います。
+- Claude Code がタスクを作ること。Opus 4.7・Sonnet 4.6 より新しいモデルでは、Claude Code はタスク用のツールを既定で使いません。この plugin は、Orca のターミナルで新しく起動する Claude には自動で有効にします。保存したセッションの再開や Orca の外で起動した Claude にも使うなら、`~/.claude/settings.json` に次を加えます。
 
   ```json
   { "env": { "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1" } }
