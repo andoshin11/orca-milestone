@@ -1,12 +1,32 @@
 // What the plugin adds when Orca starts an agent, so the panel has tasks to show without the user
-// editing any settings. Claude Code leaves its task tools off on newer models; Codex has none, so
-// it gets the MCP tool in progress-server.mjs for that one session.
+// editing any settings. Claude Code leaves its task tools off on newer models and writes no goal
+// unless told to, so it gets both; Codex has no task tools, so it gets the MCP tool in
+// progress-server.mjs. All of this lasts for that one session and touches no file of the user's.
 
 // Codex does not reach for the tool on its description alone. A session gets this on top of its own
 // instructions; a developer_instructions in the user's config.toml would be replaced, so no other
 // setting is touched.
 const INSTRUCTIONS =
   'Before you start work of more than one step, call the update_progress tool of the milestone MCP server with every step, and call it again each time a step starts or finishes. Do this without being asked and do not mention it.'
+
+// Kept free of single quotes, since it goes on a command line inside them.
+const CLAUDE_INSTRUCTIONS = [
+  'The user follows your progress in a sidebar that reads your task list, so record your work as tasks without being asked.',
+  'For work that uses tools, except a question you can answer with one or two tool calls, first split the work into about 3 to 7 steps with TaskCreate. Write each subject as a short step in the language the user writes in.',
+  'Give every task metadata: {"goal": "<one line, about 40 characters, in the language of the user, saying what the current request aims for>"}. The sidebar uses it as its heading. Work out the goal from the conversation even when the request is a short reply.',
+  'When you start a step, mark it in_progress with TaskUpdate, and mark it completed as soon as it is done. Update one at a time, with only one in_progress at once.',
+  'If steps are added or change within the same goal, add or update tasks with the same goal, and mark tasks no longer needed as deleted.',
+  'When the goal changes, first mark the tasks of the old goal completed or deleted so none stay pending or in_progress, then create new tasks with the new goal. The sidebar shows only the newest goal.',
+  'If tasks exist without a goal, add one with TaskUpdate metadata. If the task tools are unavailable, carry on without them.'
+].join(' ')
+
+/** Adds the instructions to a command line that starts with claude. Anything else is left alone. */
+export function withTaskInstructions(command) {
+  const match = command.match(/^((?:\S*\/)?claude)(?=\s|$)/)
+  // Orca or the user may have appended their own, and the last flag would win over the other.
+  if (!match || /\s--append-system-prompt(-file)?(\s|=)/.test(command)) return command
+  return `${match[1]} --append-system-prompt '${CLAUDE_INSTRUCTIONS}'${command.slice(match[1].length)}`
+}
 
 /** Adds the tool to a command line that starts with codex. Anything else is left alone. */
 export function withProgressTool(command, { execPath, serverPath }) {
@@ -28,7 +48,11 @@ export function withProgressTool(command, { execPath, serverPath }) {
 export function createLaunchHook(paths) {
   return (event, next) => {
     if (event.agent === 'claude') {
-      return next({ ...event, env: { ...event.env, CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' } })
+      return next({
+        ...event,
+        command: withTaskInstructions(event.command),
+        env: { ...event.env, CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' }
+      })
     }
     if (event.agent === 'codex') {
       return next({ ...event, command: withProgressTool(event.command, paths) })

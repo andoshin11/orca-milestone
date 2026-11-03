@@ -29,14 +29,19 @@ Claude Code と Codex には、追加の設定は要りません。Orca のタ�
 
 | エージェント | 起動時に行うこと |
 |---|---|
-| Claude Code | タスク用のツールを有効にします（`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`）。Opus 4.7・Sonnet 4.6 より新しいモデルでは、既定で無効なためです。 |
+| Claude Code | タスク用のツールを有効にし（`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`）、ゴール付きのタスクで作業を記録するよう指示を足します（`--append-system-prompt`）。すでに `--append-system-prompt` を指定している起動には足しません。 |
 | Codex | 進捗を記録する MCP ツール（`update_progress`）と、その使い方の指示を足します。Codex にはタスク一覧の機能がないためです。`~/.codex` の設定は変更しません。 |
 
 保存したセッションの再開と Orca の外で起動したエージェントには、この処理は効きません。
-- **Claude Code:** それらでも使うなら、`~/.claude/settings.json` に次を加えます。
+- **Claude Code:** それらでも使うなら、`~/.claude/settings.json` と `~/.claude/CLAUDE.md` に次を加えます。
 
   ```json
   { "env": { "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1" } }
+  ```
+
+  ```markdown
+  - 作業を始めるときは TaskCreate で手順をタスクにし、どのタスクにも `metadata: {"goal": "<今の依頼で目指していることを 1 行で>"}` を付ける。
+  - ゴールが変わったら、前のゴールの未完了タスクを completed か deleted にしてから、新しいゴールを付けたタスクを作る。
   ```
 
 - **Codex:** 新しく起動し直してください。
@@ -73,15 +78,6 @@ Node のワーカーを動かすので、フルアクセスの plugin として�
 ### アンインストール
 
 プラグインの一覧で Milestone を開き、右上の **⋯** から **削除…** を選びます。Codex の進捗ファイルを置く `~/.orca-milestone/` は残るので、不要なら削除してください。
-
-## Claude にゴールを書かせる（任意）
-
-Codex には起動時に指示を足すので、この設定は Claude Code だけのものです。同じセッションでゴールが変わっても見出しが追従するよう、`~/.claude/CLAUDE.md` などで、タスクにゴールを付けるよう Claude に指示しておくのがおすすめです。
-
-```markdown
-- 作業を始めるときは TaskCreate で手順をタスクにし、どのタスクにも `metadata: {"goal": "<今の依頼で目指していることを 1 行で>"}` を付ける。
-- ゴールが変わったら、前のゴールの未完了タスクを completed か deleted にしてから、新しいゴールを付けたタスクを作る。
-```
 
 ## 表示されないとき
 

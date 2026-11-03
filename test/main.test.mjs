@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import activate from '../main.mjs'
-import { createLaunchHook, withProgressTool } from '../src/launch-hook.mjs'
+import { createLaunchHook, withProgressTool, withTaskInstructions } from '../src/launch-hook.mjs'
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'orca-plugin.json'), 'utf8'))
 
@@ -33,7 +33,8 @@ test('a Claude launch gets the task tools turned on, and an unknown agent passes
   const next = (event) => event
   const decided = hook({ agent: 'claude', command: 'claude', env: { KEPT: 'x' } }, next)
   assert.deepEqual(decided.env, { KEPT: 'x', CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' })
-  assert.equal(decided.command, 'claude')
+  assert.ok(decided.command.startsWith("claude --append-system-prompt 'The user follows"))
+  assert.ok(decided.command.includes('metadata: {"goal":'))
 
   assert.equal(hook({ agent: 'gemini', command: 'gemini', env: {} }, () => assert.fail('passes')), undefined)
 })
@@ -55,4 +56,15 @@ test('withProgressTool leaves other commands and paths it cannot quote alone', (
   assert.equal(withProgressTool('env X=1 codex', paths), 'env X=1 codex')
   assert.equal(withProgressTool('codexish', paths), 'codexish')
   assert.equal(withProgressTool('codex', { ...paths, serverPath: "/it's/server.mjs" }), 'codex')
+})
+
+test('withTaskInstructions keeps the command line and leaves existing instructions alone', () => {
+  const command = withTaskInstructions("/bin/claude --teammate-mode auto 'do it'")
+  assert.ok(command.startsWith('/bin/claude --append-system-prompt '))
+  assert.ok(command.endsWith(" --teammate-mode auto 'do it'"))
+  assert.equal(command.match(/'/g).length, 4, 'the instructions hold no quote of their own')
+
+  for (const untouched of ['env X=1 claude', 'claudette', "claude --append-system-prompt 'mine'", 'claude --append-system-prompt-file /f']) {
+    assert.equal(withTaskInstructions(untouched), untouched)
+  }
 })
