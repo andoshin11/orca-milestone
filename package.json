@@ -2,7 +2,7 @@
   "name": "orca-milestone",
   "version": "0.3.0",
   "private": true,
-  "description": "Orca plugin that shows the Claude Code tasks of the focused workspace as milestones in the right sidebar.",
+  "description": "Orca plugin that shows the Claude Code and Codex tasks of the focused workspace as milestones in the right sidebar.",
   "license": "MIT",
   "type": "module",
   "engines": {
