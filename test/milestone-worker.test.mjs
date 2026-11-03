@@ -7,19 +7,10 @@ import { SESSION_A, SESSION_B, makeHome, markRunning, task, taskCalls, writeTask
 
 function fakeOrca() {
   const posts = []
-  const statusBar = []
   return {
     log: () => {},
     panels: { post: (event, payload) => posts.push({ event, payload }) },
-    host: {
-      call: async (method, params) => {
-        assert.equal(method, 'statusBar.update')
-        statusBar.push(params)
-        return { ok: true }
-      }
-    },
     posts,
-    statusBar,
     shown: () => posts.at(-1).payload.html
   }
 }
@@ -280,62 +271,4 @@ test('an agent event asks Orca again only when that pane changed state', async (
   worker.agentChanged({ paneKey: 'b', state: 'working', mainAgent: { state: 'waiting' } })
   await settle()
   assert.equal(asked, 3, 'the main agent of a pane counts too')
-})
-
-test('the status bar follows the tasks, sends only changes and hides without a list', async () => {
-  const home = await makeHome()
-  const orca = fakeOrca()
-  await writeTranscript(home, SESSION_A, { cwd: '/work/app', prompt: 'Build it' })
-  await writeTasks(home, SESSION_A, [task(1, 'Read', 'completed'), task(2, 'Write', 'in_progress')])
-  let active = { path: '/work/app', displayName: 'app', claudeStates: ['working'] }
-  const worker = createMilestoneWorker({
-    orca,
-    home,
-    cli: 'orca',
-    readOrca: async () => ({ active, agents: [] }),
-    watchDir: () => {}
-  })
-  await worker.refresh(true)
-  assert.deepEqual(orca.statusBar, [
-    { id: 'progress', visible: true, text: '1/2 Write', icon: 'flag', tone: 'accent', tooltip: 'Build it（1/2）' }
-  ])
-
-  await worker.refresh(true)
-  assert.equal(orca.statusBar.length, 1, 'the same status is not sent again')
-
-  await writeTasks(home, SESSION_A, [task(1, 'Read', 'completed'), task(2, 'Write', 'completed')])
-  await worker.refresh()
-  assert.equal(orca.statusBar.at(-1).text, '2/2 完了')
-  assert.equal(orca.statusBar.at(-1).tone, 'success')
-
-  active = { path: '/work/other', displayName: 'other', claudeStates: [] }
-  await worker.refresh(true)
-  assert.deepEqual(orca.statusBar.at(-1), { id: 'progress', visible: false })
-})
-
-test('a status bar failure is logged, leaves the panel working and is retried', async () => {
-  const home = await makeHome()
-  const orca = fakeOrca()
-  const logs = []
-  orca.log = (line) => logs.push(line)
-  const call = orca.host.call
-  orca.host.call = async () => {
-    throw new Error('not offered')
-  }
-  await writeTranscript(home, SESSION_A, { cwd: '/work/app', prompt: 'Build it' })
-  await writeTasks(home, SESSION_A, [task(1, 'Read', 'in_progress')])
-  const worker = createMilestoneWorker({
-    orca,
-    home,
-    cli: 'orca',
-    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
-    watchDir: () => {}
-  })
-  await worker.refresh(true)
-  assert.ok(orca.shown().includes('Build it'))
-  assert.match(logs.join('\n'), /could not update the status bar: not offered/)
-
-  orca.host.call = call
-  await worker.refresh()
-  assert.equal(orca.statusBar.length, 1)
 })
