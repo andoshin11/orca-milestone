@@ -1,6 +1,7 @@
 // Orca plugin worker entry for orca-milestone: shows the Claude tasks of the focused workspace
 // as milestones in a right-sidebar panel.
 import { homedir } from 'node:os'
+import { enableTaskTools } from './src/launch-hook.mjs'
 import { createMilestoneWorker } from './src/milestone-worker.mjs'
 import { resolveOrcaCli } from './src/orca-cli.mjs'
 
@@ -10,7 +11,7 @@ export default function activate(orca) {
     home: homedir(),
     cli: resolveOrcaCli()
   })
-  // Orca starts the worker lazily, on the first command, event or panel request.
+  orca.hooks.on('agent.launch.before', enableTaskTools)
   orca.panels.handle('view.get', () => worker.view())
   orca.panels.handle('workspace.open', ({ path }) => worker.openWorkspace(path))
   orca.commands.register('milestone.refresh', async () => {
