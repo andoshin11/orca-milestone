@@ -3,8 +3,8 @@
 
 const GOAL_MAX = 160
 const SUBJECT_MAX = 200
-// An expanded row stays short enough to read at a glance, since nothing in it scrolls.
-const ROW_TASKS_MAX = 8
+// A row with more tasks than this may need scrolling, so the pointer can enter its expansion.
+const ROW_TASKS_SHORT = 8
 
 function escape(value) {
   return String(value).replace(
@@ -43,17 +43,6 @@ function renderSession(session) {
 <ol>${session.tasks.map(renderTask).join('')}</ol></section>`
 }
 
-/** A long list leads with what is left: finished tasks fold into one line, the rest is capped. */
-function renderRowTasks(tasks) {
-  if (tasks.length <= ROW_TASKS_MAX) return tasks.map(renderTask).join('')
-  const done = tasks.filter((task) => task.status === 'completed').length
-  const left = tasks.filter((task) => task.status !== 'completed')
-  const finished = done > 0 ? `<li class="completed"><span class="mark">✓</span><span class="subject">完了 ${done} 件</span></li>` : ''
-  const hidden = left.length - ROW_TASKS_MAX
-  const more = hidden > 0 ? `<li class="more"><span class="mark"></span><span class="subject">ほか ${hidden} 件</span></li>` : ''
-  return finished + left.slice(0, ROW_TASKS_MAX).map(renderTask).join('') + more
-}
-
 function renderRow(row) {
   const percent = row.total === 0 ? 0 : Math.round((row.done / row.total) * 100)
   const badge = row.kind === 'attention'
@@ -79,8 +68,9 @@ function renderRow(row) {
   if (row.total === 0) return `<li class="row ${row.kind}" data-key="${key}">${button}</li>`
   // Hovering a row's head expands its goal and tasks; plain CSS, so it needs no script.
   const goal = row.goal ? `<p class="goal">${escape(clip(row.goal, GOAL_MAX))}</p>` : ''
-  return `<li class="row ${row.kind} has-detail" data-key="${key}">${button}
-<div class="detail"><div class="inner">${goal}<ol>${renderRowTasks(row.tasks)}</ol></div></div></li>`
+  const long = row.tasks.length > ROW_TASKS_SHORT ? ' long' : ''
+  return `<li class="row ${row.kind} has-detail${long}" data-key="${key}">${button}
+<div class="detail"><div class="inner">${goal}<ol>${row.tasks.map(renderTask).join('')}</ol></div></div></li>`
 }
 
 function renderOthers(others) {

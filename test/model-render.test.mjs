@@ -121,26 +121,12 @@ test('a list keeps its key while its tasks progress, and gets another with a new
   assert.ok(render('"quoted" <goal>', 'pending').includes('&quot;quoted&quot; &lt;goal&gt;'))
 })
 
-test('an expanded row folds a long list: finished tasks become one line and the rest is capped', () => {
-  const row = (tasks) => renderBody(buildModel(workspace, [
-    { listId: 'x', cwd: '/work/x', goal: 'G', updatedAt: 1, tasks }
+test('an expanded row shows every task, and only a long list lets the pointer in', () => {
+  const row = (count) => renderBody(buildModel(workspace, [
+    { listId: 'x', cwd: '/work/x', goal: 'G', updatedAt: 1, tasks: Array.from({ length: count }, (_, i) => task(i + 1, `t${i}.`, 'completed')) }
   ], [{ workspace: 'x', path: '/work/x', focused: false, state: 'working', since: 1 }]))
-  const many = (done, left) => [
-    ...Array.from({ length: done }, (_, i) => task(i + 1, `done${i}`, 'completed')),
-    ...Array.from({ length: left }, (_, i) => task(done + i + 1, `left${i}`, 'pending'))
-  ]
-
-  const short = row(many(7, 1))
-  assert.ok(short.includes('done0') && short.includes('left0'), 'a short list shows every task')
-  assert.ok(!short.includes('完了 7 件'))
-
-  const long = row(many(38, 2))
-  assert.ok(long.includes('完了 38 件'))
-  assert.ok(!long.includes('done0'))
-  assert.ok(long.includes('left1'))
-  assert.ok(!long.includes('class="more"'))
-
-  const capped = row(many(1, 11))
-  assert.ok(capped.includes('left7') && !capped.includes('left8'))
-  assert.ok(capped.includes('ほか 3 件'))
+  assert.ok(row(8).includes('t7.'))
+  assert.ok(!row(8).includes('has-detail long'))
+  assert.ok(row(40).includes('t39.'))
+  assert.ok(row(40).includes('has-detail long'))
 })

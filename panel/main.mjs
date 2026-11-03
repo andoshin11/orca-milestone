@@ -2,6 +2,7 @@
 // Orca recreates the panel when its sidebar tab is switched, and nothing is posted while it is
 // closed, so every open asks again. Asking again while open also keeps the worker from being
 // stopped as idle, which would end its watch on the task lists.
+import { scrollExpandedRows } from './expand.mjs'
 import { openOnPress } from './open.mjs'
 import { patchChildren } from './patch.mjs'
 
@@ -33,6 +34,7 @@ async function load() {
   }
 }
 
+scrollExpandedRows(document.body)
 openOnPress(document.body, (path) => {
   plugin.request('workspace.open', { path }).catch((error) => {
     console.warn(`milestone: workspace.open failed: ${error.code ?? error.message}`)
