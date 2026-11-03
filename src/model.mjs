@@ -97,33 +97,3 @@ export function buildModel(workspace, sessions, agents = []) {
     others
   }
 }
-
-const STATUS_TEXT_MAX = 24
-const TOOLTIP_MAX = 200
-
-function clip(text, max) {
-  const chars = [...text.replace(/\s+/g, ' ').trim()]
-  return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : chars.join('')
-}
-
-/**
- * What the status bar shows: the progress of the newest list of the focused workspace. Without a
- * list it hides, so an idle Orca has nothing extra down there.
- */
-export function buildStatusBar(model) {
-  const session = model.sessions?.[0]
-  if (!session) return { visible: false }
-  const { done, total, tasks, goal } = session
-  const count = `${done}/${total}`
-  const finished = done === total
-  const current = tasks.find((task) => task.status === 'in_progress')
-  const label = finished ? '完了' : current?.subject
-  return {
-    visible: true,
-    text: clip(label ? `${count} ${label}` : count, STATUS_TEXT_MAX),
-    icon: finished ? 'check' : 'flag',
-    // Finished wins: a finished list has nothing left that waits on the user.
-    tone: finished ? 'success' : model.agent === 'waiting' ? 'warning' : 'accent',
-    tooltip: clip(goal ? `${goal}（${count}）` : count, TOOLTIP_MAX)
-  }
-}
