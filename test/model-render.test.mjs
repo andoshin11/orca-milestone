@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { buildModel, isInside } from '../src/model.mjs'
+import { buildModel, buildStatusBar, isInside } from '../src/model.mjs'
 import { renderBody } from '../src/render.mjs'
 import { task } from './helpers.mjs'
 
@@ -115,4 +115,42 @@ test('a list keeps its key while its tasks progress, and gets another with a new
   assert.equal(keyOf(render('Goal', 'pending')), keyOf(render('Goal', 'completed')))
   assert.notEqual(keyOf(render('Goal', 'pending')), keyOf(render('Other goal', 'pending')))
   assert.ok(render('"quoted" <goal>', 'pending').includes('&quot;quoted&quot; &lt;goal&gt;'))
+})
+
+test('the status bar names the running task, warns when Claude waits and clips long text', () => {
+  const session = (tasks, goal = 'Ship it') => ({
+    listId: 'a',
+    cwd: '/w',
+    goal,
+    updatedAt: 1,
+    tasks
+  })
+  const status = (states, tasks, goal) =>
+    buildStatusBar(buildModel({ path: '/w', displayName: 'w', claudeStates: states }, [session(tasks, goal)]))
+
+  const running = [
+    { subject: 'Done', status: 'completed' },
+    { subject: 'Now', status: 'in_progress' },
+    { subject: 'Later', status: 'pending' },
+    { subject: 'Dropped', status: 'deleted' }
+  ]
+  assert.equal(status(['working'], running).text, '1/3 Now')
+  assert.equal(status(['working'], running).tone, 'accent')
+  assert.equal(status(['waiting'], running).tone, 'warning')
+
+  assert.equal(status([], [{ subject: 'Later', status: 'pending' }]).text, '0/1', 'nothing running names nothing')
+
+  const long = status([], [{ subject: 'あ'.repeat(40), status: 'in_progress' }], 'い'.repeat(300))
+  assert.equal([...long.text].length, 24)
+  assert.ok(long.text.endsWith('…'))
+  assert.equal([...long.tooltip].length, 200)
+
+  const finished = status(['waiting'], [{ subject: 'Done', status: 'completed' }])
+  assert.deepEqual(
+    { text: finished.text, icon: finished.icon, tone: finished.tone },
+    { text: '1/1 完了', icon: 'check', tone: 'success' }
+  )
+
+  assert.deepEqual(buildStatusBar(buildModel(null, [])), { visible: false })
+  assert.deepEqual(buildStatusBar(buildModel({ path: '/w', displayName: 'w' }, [])), { visible: false })
 })

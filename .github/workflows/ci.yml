@@ -24,11 +24,12 @@ jobs:
 
       - run: npm test
 
-      # Validate the manifest with the parser of the Orca release named in engines.orca.
+      # Validate the manifest with the parser of the Orca release named in engines.orca. 1.4.248 is
+      # not tagged yet, so this pins the main commit it was tried on; use the tag once it exists.
       - uses: actions/checkout@v5
         with:
           repository: stablyai/orca
-          ref: v1.4.246
+          ref: 71147f603654a2ca9fb4f13fe188f54c09c1421c
           path: .orca
           sparse-checkout: src/shared
           persist-credentials: false

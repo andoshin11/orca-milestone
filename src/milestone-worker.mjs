@@ -1,4 +1,4 @@
-// Keeps the panel in step with the focused workspace, Claude's task lists and the state of every
+// Keeps the panel and the status bar in step with the focused workspace, Claude's task lists and the state of every
 // Claude agent Orca runs. The worker renders the body of the panel and posts it; the panel patches
 // its DOM, so an update keeps the frame, the scroll position and a row's open detail.
 import { watch } from 'node:fs'
@@ -16,7 +16,7 @@ import {
   readTaskList,
   readTranscriptHead
 } from './claude-sessions.mjs'
-import { buildModel } from './model.mjs'
+import { buildModel, buildStatusBar } from './model.mjs'
 import { readWorkspaces } from './orca-cli.mjs'
 import { renderBody } from './render.mjs'
 
@@ -26,6 +26,7 @@ const TASK_LIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const SYNC_MS = 30_000
 const DEBOUNCE_MS = 150
 const REQUEST_RETRY_MS = 30_000
+const STATUS_BAR_ITEM = 'progress'
 
 export function createMilestoneWorker({
   orca,
@@ -49,6 +50,7 @@ export function createMilestoneWorker({
   let workspace = null
   let agents = []
   let lastHtml = null
+  let lastStatus = null
   let started = null
   let timer = null
   let pendingFocus = false
@@ -144,6 +146,18 @@ export function createMilestoneWorker({
     orca.panels.post('view.changed', { html })
   }
 
+  /** Orca keeps an update until it restarts, so only a change is sent. A failure never stops the panel. */
+  async function publishStatus(status) {
+    const key = JSON.stringify(status)
+    if (key === lastStatus) return
+    try {
+      await orca.host.call('statusBar.update', { id: STATUS_BAR_ITEM, ...status })
+      lastStatus = key
+    } catch (error) {
+      orca.log(`milestone: could not update the status bar: ${error.message}`)
+    }
+  }
+
   /** What a panel shows when it opens; it starts the worker's refreshes if nothing has yet. */
   async function view() {
     await start()
@@ -159,7 +173,9 @@ export function createMilestoneWorker({
       }
     }
     const sessions = await allSessions()
-    publish(renderBody(buildModel(workspace, sessions, agents)))
+    const model = buildModel(workspace, sessions, agents)
+    publish(renderBody(model))
+    await publishStatus(buildStatusBar(model))
   }
 
   /** Runs refreshes one at a time; a request during a run starts one more afterwards. */
