@@ -30,7 +30,7 @@ test('refresh posts the focused workspace tasks to the panel', async () => {
     cli: 'orca',
     readOrca: async () => {
       cliCalls += 1
-      return { active: { path: '/work/app', displayName: 'app', claudeStates: ['working'] }, agents: [] }
+      return { active: { path: '/work/app', displayName: 'app', agentStates: ['working'] }, agents: [] }
     },
     watchDir: () => {}
   })
@@ -59,7 +59,7 @@ test('a list Claude deletes after finishing stays on screen as done; a cleared u
     orca,
     home,
     cli: 'orca',
-    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
+    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', agentStates: [] }, agents: [] }),
     watchDir: () => {}
   })
   await worker.refresh(true)
@@ -82,7 +82,7 @@ test('a team lead\'s list, named session-<id prefix>, shows under its workspace'
     orca,
     home,
     cli: 'orca',
-    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
+    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', agentStates: [] }, agents: [] }),
     watchDir: () => {}
   })
   await worker.refresh(true)
@@ -108,7 +108,7 @@ test('the heading follows the goal of the current tasks, not the first prompt of
     orca,
     home,
     cli: 'orca',
-    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
+    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', agentStates: [] }, agents: [] }),
     watchDir: () => {}
   })
   await worker.refresh(true)
@@ -148,7 +148,7 @@ test('a finished list comes back from the transcript after a restart, and goes w
     home,
     cli: 'orca',
     readOrca: async () => ({
-      active: { path: '/work/app', displayName: 'app', claudeStates: [] },
+      active: { path: '/work/app', displayName: 'app', agentStates: [] },
       agents: [{ workspace: 'done', path: '/work/done', focused: false, state: 'done', since: 0 }]
     }),
     watchDir: () => {}
@@ -195,7 +195,7 @@ test('a refresh posts only a real change, at once', async () => {
     orca,
     home,
     cli: 'orca',
-    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', claudeStates: [] }, agents: [] }),
+    readOrca: async () => ({ active: { path: '/work/app', displayName: 'app', agentStates: [] }, agents: [] }),
     watchDir: () => {}
   })
   await worker.refresh(true)

@@ -76,7 +76,7 @@ const agent = (workspace, repo, state, since) => ({
 })
 
 const model = buildModel(
-  { path: '/work/search-filters', displayName: 'search-filters', claudeStates: ['working'] },
+  { path: '/work/search-filters', displayName: 'search-filters', agentStates: ['working'] },
   sessions,
   [
     agent('search-filters', 'web-app', 'working', 9),

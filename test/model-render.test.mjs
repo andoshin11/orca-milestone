@@ -4,7 +4,7 @@ import { buildModel, isInside } from '../src/model.mjs'
 import { renderBody } from '../src/render.mjs'
 import { task } from './helpers.mjs'
 
-const workspace = { path: '/work/app', displayName: 'app', claudeStates: ['working'] }
+const workspace = { path: '/work/app', displayName: 'app', agentStates: ['working'] }
 
 test('isInside matches the root and its subfolders only', () => {
   assert.ok(isInside('/work/app', '/work/app'))
@@ -28,7 +28,7 @@ test('buildModel keeps sessions with tasks inside the focused workspace', () => 
 
 test('buildModel reports no workspace and no tasks', () => {
   assert.equal(buildModel(null, []).kind, 'no-workspace')
-  const model = buildModel({ ...workspace, claudeStates: [] }, [])
+  const model = buildModel({ ...workspace, agentStates: [] }, [])
   assert.equal(model.kind, 'no-tasks')
   assert.equal(model.agent, 'none')
 })
