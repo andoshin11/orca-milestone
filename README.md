@@ -32,6 +32,8 @@ Claude Code と Codex には、追加の設定は要りません。Orca のタ�
 | Claude Code | タスク用のツールを有効にし（`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`）、ゴール付きのタスクで作業を記録するよう指示を足します（`--append-system-prompt`）。すでに `--append-system-prompt` を指定している起動には足しません。 |
 | Codex | 進捗を記録する MCP ツール（`update_progress`）と、その使い方の指示を足します。Codex にはタスク一覧の機能がないためです。`~/.codex` の設定は変更しません。 |
 
+どちらのエージェントにも、作業を終えたら次にやることの候補を回答の最後に書くよう指示します。[agent-status-panel](https://github.com/andoshin11/agent-status-panel) がこれを iPhone のボタンにします。
+
 保存したセッションの再開と Orca の外で起動したエージェントには、この処理は効きません。
 - **Claude Code:** それらでも使うなら、`~/.claude/settings.json` と `~/.claude/CLAUDE.md` に次を加えます。
 
