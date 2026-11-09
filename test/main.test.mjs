@@ -52,6 +52,16 @@ test('a Codex launch gets the progress tool, keeping the rest of its command lin
   assert.equal(command.match(/'/g).length % 2, 0, 'the quotes balance')
 })
 
+test('both agents are told to end with the buttons, on one line of the command', () => {
+  const hook = createLaunchHook(paths)
+  for (const agent of ['claude', 'codex']) {
+    const { command } = hook({ agent, command: agent, env: {} }, (event) => event)
+    assert.ok(command.includes('whose info string is next'), agent)
+    assert.ok(!command.includes('\n'), `${agent} is typed into a terminal, where a newline is Enter`)
+    assert.equal(command.match(/'/g).length % 2, 0, 'the quotes balance')
+  }
+})
+
 test('withProgressTool leaves other commands and paths it cannot quote alone', () => {
   assert.equal(withProgressTool('env X=1 codex', paths), 'env X=1 codex')
   assert.equal(withProgressTool('codexish', paths), 'codexish')
