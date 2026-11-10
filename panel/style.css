@@ -99,6 +99,7 @@ code { font-size: 12px; }
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .next.busy .action, .next.busy .submit { cursor: default; }
 .next.busy .action:not(.sending) { opacity: 0.55; }
+.next.settling .action, .next.settling .submit { opacity: 0.55; cursor: default; }
 .action.sending, .action.chosen { background: color-mix(in oklch, var(--ms-bar) 22%, var(--orca-card));
   border-color: color-mix(in oklch, var(--ms-bar) 55%, transparent); }
 /* A question, its options and the form's button. */
