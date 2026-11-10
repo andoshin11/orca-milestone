@@ -5,6 +5,7 @@ const GOAL_MAX = 160
 const SUBJECT_MAX = 200
 // A row with more tasks than this may need scrolling, so the pointer can enter its expansion.
 const ROW_TASKS_SHORT = 8
+const PROMPT_LINES_MAX = 300
 
 function escape(value) {
   return String(value).replace(
@@ -41,6 +42,20 @@ function renderSession(session) {
   return `<section data-key="${key}">${goal}<div class="count"><span>マイルストーン</span><strong>${session.done} / ${session.total}</strong></div>
 <div class="bar"><div style="width:${percent}%"></div></div>
 <ol>${session.tasks.map(renderTask).join('')}</ol></section>`
+}
+
+/**
+ * What the agent proposes to do next, one card under another. A card says which offer and which
+ * button; the worker reads the prompt again when it is pressed.
+ */
+function renderNext(next) {
+  if (!next || next.suggestions.length === 0) return ''
+  const cards = next.suggestions.map((suggestion, index) => {
+    const reason = suggestion.reason ? `<span class="reason">${escape(suggestion.reason)}</span>` : ''
+    return `<li><button type="button" class="action" data-next="${escape(next.id)}" data-index="${index}"><span class="label">${escape(suggestion.label)}</span>${reason}<span class="prompt">${escape(clip(suggestion.prompt, PROMPT_LINES_MAX))}</span></button></li>`
+  })
+  // Another offer is another set of cards: it replaces the old one without a transition.
+  return `<div class="next" data-key="${escape(`next\n${next.id}`)}"><h2>次の作業<span>選ばなくても構いません</span></h2><ol class="actions">${cards.join('')}</ol></div>`
 }
 
 function renderRow(row) {
@@ -92,7 +107,7 @@ function renderFocused(model) {
   const agent = AGENT_LABELS[model.agent] ?? ''
   const header = `<header><h1>${escape(model.workspace)}</h1><span class="agent ${model.agent}">${agent}</span></header>`
   if (model.kind === 'no-tasks') {
-    return `${header}<p class="empty">このワークスペースのエージェントはまだタスクを作っていません。</p>`
+    return `${header}<p class="empty">このワークスペースのエージェントはまだタスクを作っていません。</p>${renderNext(model.next)}`
   }
-  return header + model.sessions.map(renderSession).join('')
+  return header + model.sessions.map(renderSession).join('') + renderNext(model.next)
 }

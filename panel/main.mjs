@@ -3,6 +3,7 @@
 // closed, so every open asks again. Asking again while open also keeps the worker from being
 // stopped as idle, which would end its watch on the task lists.
 import { scrollExpandedRows } from './expand.mjs'
+import { sendOnPress } from './next.mjs'
 import { openOnPress } from './open.mjs'
 import { patchChildren } from './patch.mjs'
 
@@ -40,6 +41,8 @@ openOnPress(document.body, (path) => {
     console.warn(`milestone: workspace.open failed: ${error.code ?? error.message}`)
   })
 })
+
+sendOnPress(document.body, (request) => plugin.request('next.send', request))
 
 void load()
 setInterval(load, KEEP_ALIVE_MS)

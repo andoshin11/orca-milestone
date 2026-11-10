@@ -18,7 +18,8 @@ import {
 } from './claude-sessions.mjs'
 import { readCodexProgress } from './codex-progress.mjs'
 import { buildModel } from './model.mjs'
-import { readWorkspaces } from './orca-cli.mjs'
+import { createNextSender } from './next-actions.mjs'
+import { readWorkspaces, runOrca } from './orca-cli.mjs'
 import { progressDir } from './progress-server.mjs'
 import { renderBody } from './render.mjs'
 
@@ -34,6 +35,7 @@ export function createMilestoneWorker({
   home,
   cli,
   readOrca = readWorkspaces,
+  runCli = runOrca,
   now = Date.now,
   watchDir = (dir, onChange) => watch(dir, { recursive: true }, onChange)
 }) {
@@ -51,6 +53,7 @@ export function createMilestoneWorker({
   const replayed = new Map()
   let workspace = null
   let agents = []
+  let offers = []
   let lastHtml = null
   let started = null
   let timer = null
@@ -174,13 +177,15 @@ export function createMilestoneWorker({
   async function refreshOnce(askOrca) {
     if (askOrca || !workspace) {
       try {
-        ;({ active: workspace, agents } = await readOrca(cli))
+        let found
+        ;({ active: workspace, agents, offers: found } = await readOrca(cli))
+        offers = found ?? []
       } catch (error) {
         orca.log(`milestone: could not read the workspaces: ${error.message}`)
       }
     }
     const sessions = await allSessions()
-    publish(renderBody(buildModel(workspace, sessions, agents)))
+    publish(renderBody(buildModel(workspace, sessions, agents, offers)))
   }
 
   /** Runs refreshes one at a time; a request during a run starts one more afterwards. */
@@ -206,6 +211,23 @@ export function createMilestoneWorker({
       await running
     } finally {
       running = null
+    }
+  }
+
+  const sendOffer = createNextSender({
+    readOffers: async () => (await readOrca(cli)).offers ?? [],
+    run: (args, timeout) => runCli(cli, args, timeout)
+  })
+
+  /** Sends the prompt of a pressed button to its agent; the panel shows what went wrong. */
+  async function sendNext(request) {
+    try {
+      const result = await sendOffer(request)
+      if (result.sent) schedule(true)
+      return result
+    } catch (error) {
+      orca.log(`milestone: could not send the next step: ${error.message}`)
+      return { sent: false, reason: 'failed' }
     }
   }
 
@@ -236,5 +258,5 @@ export function createMilestoneWorker({
     return started
   }
 
-  return { start, refresh, schedule, agentChanged, view, openWorkspace }
+  return { start, refresh, schedule, agentChanged, view, openWorkspace, sendNext }
 }

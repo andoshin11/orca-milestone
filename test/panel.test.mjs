@@ -118,3 +118,28 @@ test('the wheel over a head scrolls its tasks, and opening starts at what is lef
   root.querySelectorAll('.name')[1].dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }))
   assert.equal(inner.scrollTop, 216, 'a row with no tasks has nothing to scroll')
 })
+
+test('a pressed card is sent once, and a refusal says why and lets the cards be pressed again', async () => {
+  const { sendOnPress } = await import('../panel/next.mjs')
+  const root = body('<main><div class="next"><ol class="actions"><li><button data-next="o1" data-index="0">A</button></li><li><button data-next="o1" data-index="1">B</button></li></ol></div></main>')
+  const requests = []
+  let answer = { sent: false, reason: 'typing' }
+  sendOnPress(root, async (request) => {
+    requests.push(request)
+    return answer
+  })
+  const [a, b] = root.querySelectorAll('[data-next]')
+  b.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(requests, [{ offer: 'o1', index: 1 }])
+  assert.match(root.querySelector('.status').textContent, /書きかけ/)
+  assert.ok(!root.querySelector('.actions').classList.contains('busy'))
+
+  answer = { sent: true }
+  a.click()
+  a.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(requests.length, 2, 'a second click while one is on its way is ignored')
+  assert.ok(a.classList.contains('sending'))
+  assert.ok(root.querySelector('.actions').classList.contains('busy'))
+})

@@ -4,6 +4,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { nextOffer } from './next-actions.mjs'
 
 /** The CLI bundled with the Orca app that runs this worker, else `orca` on PATH. */
 export function resolveOrcaCli(execPath = process.execPath) {
@@ -12,9 +13,9 @@ export function resolveOrcaCli(execPath = process.execPath) {
   return existsSync(bundled) ? bundled : 'orca'
 }
 
-function run(cli, args) {
+export function runOrca(cli, args, timeout = 10_000) {
   return new Promise((resolve, reject) => {
-    execFile(cli, args, { timeout: 10_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+    execFile(cli, args, { timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
       if (error) {
         reject(error)
         return
@@ -35,10 +36,11 @@ function mainAgents(worktree) {
 }
 
 /**
- * The focused workspace ({ path, displayName, agentStates }, or null) and the main agents
- * of every workspace that is not archived. Prompts and replies are left out on purpose.
+ * The focused workspace ({ path, displayName, agentStates }, or null), the main agents of every
+ * workspace that is not archived, and what each finished agent proposes to do next. Of the prompts
+ * and replies, only the block an agent wrote for those buttons is kept.
  */
-export async function readWorkspaces(cli) {
+export async function readWorkspaces(cli, run = runOrca) {
   const response = await run(cli, ['worktree', 'ps', '--limit', '1000', '--json'])
   if (!response?.ok) {
     throw new Error(response?.error?.message ?? 'orca worktree ps failed')
@@ -62,6 +64,7 @@ export async function readWorkspaces(cli) {
         state: agent.state,
         since: agent.stateStartedAt ?? null
       }))
-    )
+    ),
+    offers: worktrees.map(nextOffer).filter(Boolean)
   }
 }

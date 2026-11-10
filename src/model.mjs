@@ -74,8 +74,9 @@ function buildOthers(agents, sessions) {
  * @param workspace { path, displayName, agentStates } of the focused workspace, or null
  * @param sessions  [{ listId, cwd, goal, tasks, updatedAt }] of every workspace, newest first
  * @param agents    [{ workspace, repo, path, focused, state, since }] Orca runs, one per Claude or Codex agent
+ * @param offers    [{ id, path, suggestions }] what finished agents propose to do next
  */
-export function buildModel(workspace, sessions, agents = []) {
+export function buildModel(workspace, sessions, agents = [], offers = []) {
   const others = buildOthers(agents, sessions)
   if (!workspace) return { kind: 'no-workspace', others }
   const mine = sessions
@@ -95,6 +96,7 @@ export function buildModel(workspace, sessions, agents = []) {
           ? 'idle'
           : 'none',
     sessions: mine,
+    next: offers.find((offer) => offer.path === workspace.path) ?? null,
     others
   }
 }

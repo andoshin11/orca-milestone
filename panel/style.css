@@ -77,3 +77,31 @@ code { font-size: 12px; }
 @media (prefers-reduced-motion: reduce) {
   .bar > div, li, li .mark, li .strike, .row .detail { transition: none; }
 }
+/* What the agent proposes to do next, one card under another, as on the phone. A soft raised
+   surface instead of a border; green only on the card being sent. */
+.next { margin: 2px 0 10px; }
+.next h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 6px;
+  font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
+.next h2 span { font-weight: 400; }
+.actions { display: flex; flex-direction: column; gap: 6px; }
+.actions li { display: block; padding: 0; }
+.action { display: flex; flex-direction: column; gap: 3px; box-sizing: border-box; width: 100%; padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--orca-foreground) 9%, transparent); border-radius: 10px;
+  font: inherit; text-align: left; color: var(--orca-card-foreground); cursor: pointer;
+  background: linear-gradient(color-mix(in oklch, var(--orca-foreground) 7%, var(--orca-card)), var(--orca-card));
+  transition: transform 100ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out; }
+.action:hover { background: color-mix(in oklch, var(--orca-foreground) 10%, var(--orca-card)); }
+.action:active { transform: scale(0.98); }
+.action:focus-visible { outline: 1px solid var(--orca-foreground); outline-offset: 1px; }
+.action .label { font-weight: 600; }
+.action .reason { font-size: 12px; }
+.action .prompt { font-size: 11px; color: var(--orca-muted-foreground);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.actions.busy .action { cursor: default; }
+.actions.busy .action:not(.sending) { opacity: 0.55; }
+.action.sending { background: color-mix(in oklch, var(--ms-bar) 22%, var(--orca-card));
+  border-color: color-mix(in oklch, var(--ms-bar) 55%, transparent); }
+.next .status { margin: 6px 0 0; font-size: 11px; color: var(--ms-todo); }
+@media (prefers-reduced-motion: reduce) {
+  .action { transition: none; }
+}
