@@ -8,7 +8,11 @@
 // an earlier turn does nothing, and keys go to a menu only after its screen is read.
 import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
+import { isDangerous } from './dangerous.mjs'
+import { hasGrantHook } from './turn-grant.mjs'
 import { riskOf, whereOf } from './risk.mjs'
+
+export { isDangerous }
 
 const SUGGESTIONS_MAX = 3
 const LABEL_MAX = 30
@@ -50,21 +54,6 @@ const CODEX_ALLOW_ONCE_LINE = /^\s*(?:›\s*)?1\. Yes, proceed \(y\)\s*$/m
 const CODEX_PERMISSION_FOOTER = 'Press enter to confirm or esc to cancel'
 const CODEX_EDIT_MENU = 'Would you like to make the following edits?'
 const CODEX_DESTINATION = 'Destination:'
-// Commands that ask for a second look before the panel may allow them. A heuristic: it can miss one.
-const DANGEROUS_COMMANDS = [
-  /(^|[\s;&|(])rm(\s|$)/,
-  /(^|[\s;&|(])sudo(\s|$)/,
-  /\bgit\s+push\b[^;&|]*\s(--force(-with-lease)?|-f)(\s|$)/,
-  /\bgit\s+reset\s+--hard\b/,
-  /\bgit\s+clean\b/,
-  /\bdd\s+if=/,
-  /\bmkfs\b/,
-  /\bchmod\s+-R\b/,
-  /\bkubectl\s+delete\b/,
-  /\bterraform\s+(destroy|apply)\b/,
-  /\bdrop\s+(table|database)\b/i,
-  /\btruncate\s+table\b/i
-]
 
 function shorten(text, max) {
   const chars = [...text.replace(/\s+/g, ' ').trim()]
@@ -218,9 +207,6 @@ async function questionOffer(worktree, readQuestion) {
   return questions ? { ...base('form', worktree, agent, asked.toolUseId), questions } : null
 }
 
-export function isDangerous(call) {
-  return call.name === 'Bash' && typeof call.input?.command === 'string' && DANGEROUS_COMMANDS.some((pattern) => pattern.test(call.input.command))
-}
 
 /** What a tool call would do, in a line, and a piece of it that its permission menu shows. */
 function describeCall({ input }) {
@@ -258,20 +244,30 @@ async function claudeCall(worktree, agent, readCall, readPane) {
   return shown && isPermissionMenu(shown, describeCall(fromOrca).menuHint) ? fromOrca : null
 }
 
-async function permissionOffer(worktree, readCall, readPane) {
+const REST_CARD = { label: 'このターンの残りも許可', action: 'allow-rest', detail: '今回を許可し、このターンの残りも、書き換えるまでのものは自動で許可します' }
+
+/**
+ * A session started with the PermissionRequest hook can allow the rest of its turn (turn-grant.mjs):
+ * one more card, never for a dangerous command, since the grant would not cover the next one either.
+ */
+async function permissionOffer(worktree, readCall, readPane, readLaunchInfo) {
   const agent = soleAgent(worktree)
   if (agent?.agentType !== 'claude' || !PERMISSION_STATES.includes(agent.state) || !agent.toolName || agent.toolName === 'AskUserQuestion') return null
   const call = await claudeCall(worktree, agent, readCall, readPane)
   if (!call) return null
   const { summary, menuHint } = describeCall(call)
+  const dangerous = isDangerous(call)
+  const info = dangerous ? null : await readLaunchInfo(worktree.path).catch(() => null)
+  const rest = info && hasGrantHook(info.args)
   return {
     ...base('permission', worktree, agent, call.toolUseId),
     question: `${call.name} を許可しますか？ ${summary}`,
     menuHint,
     risk: riskOf(call),
     where: whereOf(call, worktree.path),
-    dangerous: isDangerous(call),
-    suggestions: permissionCards(false)
+    dangerous,
+    suggestions: rest ? [...permissionCards(false), REST_CARD] : permissionCards(false),
+    ...(rest ? { sessionId: info.sessionId } : {})
   }
 }
 
@@ -328,18 +324,28 @@ async function codexPermissionOffer(worktree, readPane) {
  * @param readCall     resolves a workspace path to its Claude session's pending tool call
  * @param readPane     resolves a pane key to what its terminal shows now
  * @param readLaunch   resolves a workspace path to its Claude session told something older, see restart.mjs
+ * @param readLaunchInfo resolves a workspace path to its Claude session and command line, see restart.mjs
+ * @param readAllowed  resolves a session id to what the rest of its turn allowed, see turn-grant.mjs
  */
-export async function offersOf(worktrees, { readQuestion = async () => null, readCall = async () => null, readPane = async () => null, readLaunch = async () => null } = {}) {
+export async function offersOf(worktrees, { readQuestion = async () => null, readCall = async () => null, readPane = async () => null, readLaunch = async () => null, readLaunchInfo = async () => null, readAllowed = async () => [] } = {}) {
   const offers = []
   for (const worktree of worktrees) {
     const offer =
       nextOffer(worktree, await launchOf(worktree, readLaunch)) ??
       (await questionOffer(worktree, readQuestion)) ??
-      (await permissionOffer(worktree, readCall, readPane)) ??
+      (await permissionOffer(worktree, readCall, readPane, readLaunchInfo)) ??
       (await codexPermissionOffer(worktree, readPane))
-    if (offer) offers.push(offer)
+    if (!offer) continue
+    // What the rest of this turn allowed unread, listed for the workspace on screen.
+    const allowed = worktree.isActive && offer.agent === 'claude' ? await allowedOf(worktree, readLaunchInfo, readAllowed) : []
+    offers.push(allowed.length > 0 ? { ...offer, allowed } : offer)
   }
   return offers
+}
+
+async function allowedOf(worktree, readLaunchInfo, readAllowed) {
+  const info = await readLaunchInfo(worktree.path).catch(() => null)
+  return info && hasGrantHook(info.args) ? readAllowed(info.sessionId).catch(() => []) : []
 }
 
 /** A workspace not on screen has no tab for its pane, and its terminal only records the key. */
@@ -370,8 +376,9 @@ export async function readPaneScreen(run, paneKey) {
  *   longer on offer, `typing` when Codex has a draft a prompt would join, `confirm` to allow a
  *   dangerous command without `confirmed: true`, or what `restart` resolves to. It throws when sending fails.
  * @param restart    starts a session again, see restart.mjs
+ * @param grantRest  allows the rest of the turn of a session id, see turn-grant.mjs
  */
-export function createNextSender({ readOffers, run, restart = async () => ({ sent: false, reason: 'stale' }), wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
+export function createNextSender({ readOffers, run, restart = async () => ({ sent: false, reason: 'stale' }), grantRest = async () => { throw new Error('cannot allow the rest of a turn') }, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
   const used = new Set()
 
   function take(offer) {
@@ -444,7 +451,11 @@ export function createNextSender({ readOffers, run, restart = async () => ({ sen
     take(offer)
     try {
       if (keys) await answerForm(terminal.handle, keys)
-      else if (suggestion.action) await press(terminal.handle, suggestion.action === 'allow' ? ALLOW_ONCE_KEY : ESCAPE_KEY)
+      else if (suggestion.action === 'allow-rest') {
+        // The grant first: the next call asks the hook as soon as this one is allowed.
+        await grantRest(found.sessionId)
+        await press(terminal.handle, ALLOW_ONCE_KEY)
+      } else if (suggestion.action) await press(terminal.handle, suggestion.action === 'allow' ? ALLOW_ONCE_KEY : ESCAPE_KEY)
       else if (suggestion.keys) await press(terminal.handle, suggestion.keys)
       else await sendPrompt(found, terminal.handle, suggestion.prompt)
     } catch (error) {

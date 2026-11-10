@@ -118,6 +118,9 @@ code { font-size: 12px; }
 .next h2 .risk { font-weight: 600; color: var(--orca-muted-foreground); }
 .next h2 .risk.read { color: var(--ms-done); }
 .next h2 .risk.outside { color: var(--ms-working); }
+.next .allowed { margin: 10px 0 0; font-size: 12px; color: var(--orca-muted-foreground); }
+.next .allowed p { margin: 0 0 4px; font-weight: 600; }
+.next .allowed ul { margin: 0; padding-left: 16px; overflow-wrap: anywhere; }
 .next .where { margin: -4px 0 8px; font-size: 12px; color: var(--orca-muted-foreground); overflow-wrap: anywhere; }
 .action.armed { background: color-mix(in oklch, var(--ms-todo) 16%, var(--orca-card));
   border-color: color-mix(in oklch, var(--ms-todo) 60%, transparent); }

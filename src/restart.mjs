@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process'
 import { open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { claudePaths, readRunningSessions } from './claude-sessions.mjs'
-import { claudeInstructions, withTaskInstructions } from './launch-hook.mjs'
+import { launchSignature, withTaskInstructions } from './launch-hook.mjs'
 
 const TAIL_BYTES = 256 * 1024
 // Claude Code paints its next-prompt suggestion in gray in the input box: start of the input row,
@@ -39,26 +39,34 @@ async function readParentArgs(pid) {
   return ppid ? readArgs(ppid) : null
 }
 
-/** Whether a Claude command line lacks what the plugin tells a session now. */
-export function isStale(args, instructions = claudeInstructions()) {
-  return !args.includes(instructions)
+/** Whether a Claude command line lacks what the plugin gives a session now. */
+export function isStale(args, signature = launchSignature()) {
+  return !signature.every((part) => args.includes(part))
 }
 
 /**
- * The one running Claude session in a workspace when it was told something older, or null.
+ * The one running Claude session in a workspace with its command line, or null.
  * @returns { sessionId, pid, args }
  */
-export function createLaunchReader(home, { readArgsOf = readArgs } = {}) {
+export function createLaunchInfoReader(home, { readArgsOf = readArgs } = {}) {
   const { sessionsRoot } = claudePaths(home)
   // A process keeps its command line, so it is read once.
   const known = new Map()
-  return async function readLaunch(path) {
+  return async function readLaunchInfo(path) {
     const inside = (await readRunningSessions(sessionsRoot)).filter((entry) => entry.cwd === path || entry.cwd.startsWith(`${path}/`))
     if (inside.length !== 1) return null
     const [{ sessionId, pid }] = inside
     if (!known.has(pid)) known.set(pid, await readArgsOf(pid))
     const args = known.get(pid)
-    return args && isStale(args) ? { sessionId, pid, args } : null
+    return args ? { sessionId, pid, args } : null
+  }
+}
+
+/** The one running Claude session in a workspace when it was told something older, or null. */
+export function createLaunchReader(home, { readArgsOf = readArgs, readLaunchInfo = createLaunchInfoReader(home, { readArgsOf }) } = {}) {
+  return async function readLaunch(path) {
+    const info = await readLaunchInfo(path)
+    return info && isStale(info.args) ? info : null
   }
 }
 
