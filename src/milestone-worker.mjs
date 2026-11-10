@@ -22,7 +22,8 @@ import {
 } from './claude-sessions.mjs'
 import { readCodexProgress } from './codex-progress.mjs'
 import { buildModel } from './model.mjs'
-import { createNextSender, readPaneScreen } from './next-actions.mjs'
+import { createNextSender, readPaneScreen, readTerminalScreen } from './next-actions.mjs'
+import { createLaunchReader, createRestarter } from './restart.mjs'
 import { readWorkspaces, runOrca } from './orca-cli.mjs'
 import { progressDir } from './progress-server.mjs'
 import { renderBody } from './render.mjs'
@@ -66,7 +67,9 @@ export function createMilestoneWorker({
     readCall: createPendingReader(home, pendingCall),
     // Orca calls an agent working while its background shells run, even after its turn.
     readTurnEnded: createPendingReader(home, turnEnded),
-    readPane: (paneKey) => readPaneScreen(runArgs, paneKey)
+    readPane: (paneKey) => readPaneScreen(runArgs, paneKey),
+    // A Claude session started with older instructions than the launch hook gives now.
+    readLaunch: createLaunchReader(home)
   }
   let lastHtml = null
   let started = null
@@ -230,7 +233,8 @@ export function createMilestoneWorker({
 
   const sendOffer = createNextSender({
     readOffers: async () => (await readOrca(cli, runCli, readers)).offers ?? [],
-    run: runArgs
+    run: runArgs,
+    restart: createRestarter({ home, run: runArgs, readLaunch: readers.readLaunch, readScreen: (handle) => readTerminalScreen(runArgs, handle) })
   })
 
   /** Sends the prompt of a pressed button to its agent; the panel shows what went wrong. */

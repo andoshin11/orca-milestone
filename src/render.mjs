@@ -91,7 +91,7 @@ function renderNext(offer) {
   } else {
     heading = '<h2>次の作業<span>選ばなくても構いません</span></h2>'
     const cards = offer.suggestions.map((s, index) =>
-      card(offer.id, index, s.label, [['reason', s.reason], ['prompt', clip(s.prompt, PROMPT_LINES_MAX)]])
+      card(offer.id, index, s.label, s.action === 'restart' ? [['detail', s.detail]] : [['reason', s.reason], ['prompt', clip(s.prompt, PROMPT_LINES_MAX)]])
     )
     body = `<ol class="actions">${cards.join('')}</ol>`
   }
