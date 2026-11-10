@@ -34,9 +34,12 @@ const CLAUDE_INSTRUCTIONS = [
   NEXT_INSTRUCTIONS
 ].join(' ')
 
-/** Adds the instructions to a command line that starts with claude. Anything else is left alone. */
+/**
+ * Adds the instructions to a command line that starts with claude, or with the `orca claude-teams`
+ * that Orca runs for Agent Teams and that hands its arguments on to claude. Anything else is left alone.
+ */
 export function withTaskInstructions(command) {
-  const match = command.match(/^((?:\S*\/)?claude)(?=\s|$)/)
+  const match = command.match(/^((?:\S*\/)?(?:claude|orca(?:-dev|-ide)?\s+claude-teams))(?=\s|$)/)
   // Orca or the user may have appended their own, and the last flag would win over the other.
   if (!match || /\s--append-system-prompt(-file)?(\s|=)/.test(command)) return command
   return `${match[1]} --append-system-prompt '${CLAUDE_INSTRUCTIONS}'${command.slice(match[1].length)}`
@@ -61,7 +64,7 @@ export function withProgressTool(command, { execPath, serverPath }) {
 
 export function createLaunchHook(paths) {
   return (event, next) => {
-    if (event.agent === 'claude') {
+    if (event.agent === 'claude' || event.agent === 'claude-agent-teams') {
       return next({
         ...event,
         command: withTaskInstructions(event.command),
