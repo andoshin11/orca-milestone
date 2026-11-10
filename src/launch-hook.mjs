@@ -25,7 +25,7 @@ const INSTRUCTIONS = [
 // Kept free of single quotes, since it goes on a command line inside them.
 const CLAUDE_INSTRUCTIONS = [
   'The user follows your progress in a sidebar that reads your task list, so record your work as tasks without being asked.',
-  'For work that uses tools, except a question you can answer with one or two tool calls, first split the work into about 3 to 7 steps with TaskCreate. Write each subject as a short step in the language the user writes in.',
+  'Whenever the work takes three or more tool calls, you must first split it into about 3 to 7 steps with TaskCreate, before the first of those calls. This holds even when the work looks light, is read-only, or runs its calls in parallel. Only a question you can answer with one or two tool calls is exempt. Write each subject as a short step in the language the user writes in.',
   'Give every task metadata: {"goal": "<one line, about 40 characters, in the language of the user, saying what the current request aims for>"}. The sidebar uses it as its heading. Work out the goal from the conversation even when the request is a short reply.',
   'When you start a step, mark it in_progress with TaskUpdate, and mark it completed as soon as it is done. Update one at a time, with only one in_progress at once.',
   'If steps are added or change within the same goal, add or update tasks with the same goal, and mark tasks no longer needed as deleted.',
