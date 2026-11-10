@@ -6,6 +6,8 @@ const SUBJECT_MAX = 200
 // A row with more tasks than this may need scrolling, so the pointer can enter its expansion.
 const ROW_TASKS_SHORT = 8
 const PROMPT_LINES_MAX = 300
+// What a call waiting for permission would do, as src/risk.mjs tells it.
+const RISK_LABELS = { read: '読むだけ', write: '書き換える', outside: '外に出る' }
 
 function escape(value) {
   return String(value).replace(
@@ -77,11 +79,13 @@ function renderNext(offer) {
     const cards = offer.suggestions.map((s, index) => card(offer.id, index, s.label, [['detail', s.detail]]))
     body = `<p class="ask">${escape(offer.question)}</p><ol class="actions">${cards.join('')}</ol>`
   } else if (offer.kind === 'permission') {
-    heading = `<h2>許可の確認${offer.dangerous ? '<span class="danger">危険なコマンド</span>' : ''}</h2>`
+    const risk = offer.dangerous ? '<span class="danger">危険なコマンド</span>' : RISK_LABELS[offer.risk] ? `<span class="risk ${escape(offer.risk)}">${RISK_LABELS[offer.risk]}</span>` : ''
+    heading = `<h2>許可の確認${risk}</h2>`
     const cards = offer.suggestions.map((s, index) =>
       card(offer.id, index, s.label, [['detail', s.detail]], s.action === 'allow' && offer.dangerous ? ' data-dangerous="1"' : '')
     )
-    body = `<p class="ask">${escape(offer.question)}</p><ol class="actions">${cards.join('')}</ol>`
+    const where = offer.where ? `<p class="where">場所: ${escape(offer.where)}</p>` : ''
+    body = `<p class="ask">${escape(offer.question)}</p>${where}<ol class="actions">${cards.join('')}</ol>`
   } else {
     heading = '<h2>次の作業<span>選ばなくても構いません</span></h2>'
     const cards = offer.suggestions.map((s, index) =>

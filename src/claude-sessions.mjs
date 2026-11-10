@@ -412,7 +412,8 @@ function pendingToolUse(text, matches) {
     const content = Array.isArray(entry.message?.content) ? entry.message.content : []
     for (const part of content.toReversed()) {
       if (part?.type === 'tool_result') answered.add(part.tool_use_id)
-      if (part?.type === 'tool_use' && matches(part)) return answered.has(part.id) ? null : part
+      // With the folder the shell was in, which a command that does not change it runs in.
+      if (part?.type === 'tool_use' && matches(part)) return answered.has(part.id) ? null : { ...part, cwd: typeof entry.cwd === 'string' ? entry.cwd : undefined }
     }
   }
   return null
@@ -427,7 +428,7 @@ export function pendingQuestion(text) {
 /** The last tool call in a transcript, when it has no result yet: the one waiting for permission. */
 export function pendingCall(text) {
   const part = pendingToolUse(text, () => true)
-  return part ? { toolUseId: part.id, name: part.name, input: part.input ?? {} } : null
+  return part ? { toolUseId: part.id, name: part.name, input: part.input ?? {}, ...(part.cwd ? { cwd: part.cwd } : {}) } : null
 }
 
 /**
