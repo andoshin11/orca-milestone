@@ -67,7 +67,7 @@ test('a Codex launch gets the progress tool, keeping the rest of its command lin
   assert.ok(command.includes(`-c 'mcp_servers.milestone.command="/Apps/Orca.app/MacOS/Orca"'`))
   assert.ok(command.includes(`-c 'mcp_servers.milestone.args=["/plugin/src/progress-server.mjs"]'`))
   assert.ok(command.includes(`-c 'mcp_servers.milestone.env={ELECTRON_RUN_AS_NODE="1"}'`))
-  assert.ok(command.includes(`-c 'developer_instructions="Before you start`))
+  assert.ok(command.includes(`-c 'developer_instructions="Whenever the work takes three or more tool calls, you must first call the update_progress tool`))
   assert.equal(command.match(/'/g).length % 2, 0, 'the quotes balance')
 })
 

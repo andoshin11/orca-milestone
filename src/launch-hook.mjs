@@ -18,7 +18,7 @@ const NEXT_INSTRUCTIONS = [
 // instructions; a developer_instructions in the user's config.toml would be replaced, so no other
 // setting is touched.
 const INSTRUCTIONS = [
-  'Before you start work of more than one step, call the update_progress tool of the milestone MCP server with every step, and call it again each time a step starts or finishes. Do this without being asked and do not mention it.',
+  'Whenever the work takes three or more tool calls, you must first call the update_progress tool of the milestone MCP server with the goal and about 3 to 7 steps, before the first of those calls. This holds even when the work looks light, is read-only, or runs its calls in parallel. Only a question you can answer with one or two tool calls is exempt. Call it again each time a step starts or finishes. Do this without being asked and do not mention it.',
   NEXT_INSTRUCTIONS
 ].join(' ')
 
