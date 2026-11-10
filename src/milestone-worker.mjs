@@ -14,11 +14,14 @@ import {
   listRecentTaskLists,
   readPromptBeforeTask,
   readTaskList,
-  readTranscriptHead
+  readTranscriptHead,
+  createPendingReader,
+  pendingCall,
+  pendingQuestion
 } from './claude-sessions.mjs'
 import { readCodexProgress } from './codex-progress.mjs'
 import { buildModel } from './model.mjs'
-import { createNextSender } from './next-actions.mjs'
+import { createNextSender, readPaneScreen } from './next-actions.mjs'
 import { readWorkspaces, runOrca } from './orca-cli.mjs'
 import { progressDir } from './progress-server.mjs'
 import { renderBody } from './render.mjs'
@@ -54,6 +57,14 @@ export function createMilestoneWorker({
   let workspace = null
   let agents = []
   let offers = []
+  const runArgs = (args, timeout) => runCli(cli, args, timeout)
+  // A question or a call waiting for permission is read from the transcript of Claude's session,
+  // a Codex menu from the screen of its pane.
+  const readers = {
+    readQuestion: createPendingReader(home, pendingQuestion),
+    readCall: createPendingReader(home, pendingCall),
+    readPane: (paneKey) => readPaneScreen(runArgs, paneKey)
+  }
   let lastHtml = null
   let started = null
   let timer = null
@@ -178,7 +189,7 @@ export function createMilestoneWorker({
     if (askOrca || !workspace) {
       try {
         let found
-        ;({ active: workspace, agents, offers: found } = await readOrca(cli))
+        ;({ active: workspace, agents, offers: found } = await readOrca(cli, runCli, readers))
         offers = found ?? []
       } catch (error) {
         orca.log(`milestone: could not read the workspaces: ${error.message}`)
@@ -215,8 +226,8 @@ export function createMilestoneWorker({
   }
 
   const sendOffer = createNextSender({
-    readOffers: async () => (await readOrca(cli)).offers ?? [],
-    run: (args, timeout) => runCli(cli, args, timeout)
+    readOffers: async () => (await readOrca(cli, runCli, readers)).offers ?? [],
+    run: runArgs
   })
 
   /** Sends the prompt of a pressed button to its agent; the panel shows what went wrong. */

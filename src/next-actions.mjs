@@ -1,24 +1,68 @@
-// The next steps an agent proposed at the end of its reply, and sending the one pressed in the
-// panel. The block is the one the launch hook asks for, and the rules match agent-status-panel,
-// which turns the same block into buttons on a phone. The panel says only which button: the prompt
-// is read again from the reply when it is pressed, so a button from an earlier turn does nothing.
+// What an agent offers the user to choose from in the panel, and sending the choice:
+// - a proposal: the next steps it wrote at the end of its reply (the block the launch hook asks for)
+// - a question: Claude Code's AskUserQuestion, as cards, or as a form for several questions or answers
+// - a permission: a tool waiting to be allowed, in Claude Code or Codex
+// The rules match agent-status-panel, which shows the same choices on a phone. The panel says only
+// which offer and which card: the worker reads the agent again when one is pressed, so a card from
+// an earlier turn does nothing, and keys go to a menu only after its screen is read.
 import { createHash } from 'node:crypto'
+import { basename } from 'node:path'
 
 const SUGGESTIONS_MAX = 3
 const LABEL_MAX = 30
 const PROMPT_MAX = 300
 const REASON_MAX = 80
+const QUESTION_MAX = 300
+const OPTION_MAX = 60
+const DETAIL_MAX = 200
+// One key each: the menu takes the number of an option as a single key press.
+const OPTIONS_MAX = 9
+const QUESTIONS_MAX = 4
 const NEXT_BLOCK = /```next[ \t]*\r?\n([\s\S]*?)\r?\n?```\s*$/
 const CONTROL = /[\u0000-\u001f\u007f]/
 const TRACKED_AGENTS = new Set(['claude', 'codex'])
+const PERMISSION_STATES = ['waiting', 'permission']
 const USED_MAX = 256
 const SUBMIT_WAIT_SECONDS = '8'
 const SEND_TIMEOUT_MS = 20_000
+const SCREEN_LINES = '60'
 // Claude Code's stash: it takes what is in the input box and puts it back after the next submit.
 const STASH_KEY = '\u0013'
 const STASH_WAIT_MS = 400
 // Codex shows this while its input box is empty. Text in the box does not show on a screen read.
 const CODEX_EMPTY_HINT = '? for shortcuts'
+const TAB_KEY = '\t'
+const SUBMIT_KEY = '\r'
+const ESCAPE_KEY = '\u001b'
+const ALLOW_ONCE_KEY = '1'
+const KEY_WAIT_MS = 250
+const REVIEW_WAIT_MS = 800
+// On the review page the menu shows after the last question.
+const REVIEW_PAGE = 'Submit answers'
+// Claude Code's permission menu: the first option differs from nothing else on it, while the other
+// numbers change with the tool (on Bash, 3 switches to auto mode), so only 1 is ever pressed.
+const ALLOW_ONCE_LINE = /^\s*(?:❯\s*)?1\. Yes\s*$/m
+const PERMISSION_FOOTER = 'Esc to cancel'
+// Codex's permission menu. Its second option stops asking for good, so only the first is pressed.
+const CODEX_ALLOW_ONCE_LINE = /^\s*(?:›\s*)?1\. Yes, proceed \(y\)\s*$/m
+const CODEX_PERMISSION_FOOTER = 'Press enter to confirm or esc to cancel'
+const CODEX_EDIT_MENU = 'Would you like to make the following edits?'
+const CODEX_DESTINATION = 'Destination:'
+// Commands that ask for a second look before the panel may allow them. A heuristic: it can miss one.
+const DANGEROUS_COMMANDS = [
+  /(^|[\s;&|(])rm(\s|$)/,
+  /(^|[\s;&|(])sudo(\s|$)/,
+  /\bgit\s+push\b[^;&|]*\s(--force(-with-lease)?|-f)(\s|$)/,
+  /\bgit\s+reset\s+--hard\b/,
+  /\bgit\s+clean\b/,
+  /\bdd\s+if=/,
+  /\bmkfs\b/,
+  /\bchmod\s+-R\b/,
+  /\bkubectl\s+delete\b/,
+  /\bterraform\s+(destroy|apply)\b/,
+  /\bdrop\s+(table|database)\b/i,
+  /\btruncate\s+table\b/i
+]
 
 function shorten(text, max) {
   const chars = [...text.replace(/\s+/g, ' ').trim()]
@@ -58,22 +102,207 @@ export function parseSuggestions(message) {
 }
 
 /**
- * What a workspace's agent proposes now: only one that finished its turn, and only when the
- * workspace has one live main agent, so a button cannot reach another agent than the one shown.
+ * The one live main agent of a workspace, or null. With two, a card could reach another agent
+ * than the one shown. Orca keeps the record of a pane that has closed, without hasLivePty.
  */
-export function nextOffer(worktree) {
+function soleAgent(worktree) {
   if (worktree.isArchived) return null
-  // Orca keeps the record of a pane that has closed, without hasLivePty.
   const agents = (worktree.agents ?? []).filter(
     (agent) => TRACKED_AGENTS.has(agent.agentType) && !agent.parentPaneKey && agent.hasLivePty === true
   )
-  if (agents.length !== 1 || agents[0].state !== 'done') return null
-  const [agent] = agents
+  return agents.length === 1 ? agents[0] : null
+}
+
+/** Changes with every turn and every call, so a card shown for an earlier one matches nothing. */
+function offerId(agent, extra = '') {
+  return createHash('sha256').update(`${agent.paneKey}\n${agent.stateStartedAt}\n${extra}`).digest('hex').slice(0, 16)
+}
+
+function base(kind, worktree, agent, extra) {
+  return { kind, id: offerId(agent, extra), path: worktree.path, agent: agent.agentType, paneKey: agent.paneKey }
+}
+
+/** What a workspace's agent proposes now: only one that finished its turn. */
+export function nextOffer(worktree) {
+  const agent = soleAgent(worktree)
+  if (agent?.state !== 'done') return null
   const suggestions = parseSuggestions(agent.lastAssistantMessage)
-  if (suggestions.length === 0) return null
-  // Changes with every turn, so a button shown for an earlier reply matches nothing.
-  const id = createHash('sha256').update(`${agent.paneKey}\n${agent.stateStartedAt}`).digest('hex').slice(0, 16)
-  return { id, path: worktree.path, agent: agent.agentType, paneKey: agent.paneKey, suggestions }
+  return suggestions.length > 0 ? { ...base('proposal', worktree, agent), suggestions } : null
+}
+
+/**
+ * The cards for one question that has one answer. The options keep their order and none is left
+ * out, since the key to press is the position.
+ */
+export function questionButtons(asked) {
+  if (asked?.questions?.length !== 1) return null
+  const [{ question, multiSelect, options }] = asked.questions
+  if (typeof question !== 'string' || !question.trim() || multiSelect) return null
+  if (!Array.isArray(options) || options.length === 0 || options.length > OPTIONS_MAX) return null
+  if (!options.every((option) => typeof option?.label === 'string' && option.label.trim())) return null
+  return {
+    question: shorten(question, QUESTION_MAX),
+    suggestions: options.map((option, index) => ({
+      label: shorten(option.label, OPTION_MAX),
+      keys: String(index + 1),
+      detail: typeof option.description === 'string' ? shorten(option.description, DETAIL_MAX) : ''
+    }))
+  }
+}
+
+/** Several questions, or one with several answers: a form answered and sent at once. */
+export function questionForm(asked) {
+  const questions = asked?.questions
+  if (!Array.isArray(questions) || questions.length === 0 || questions.length > QUESTIONS_MAX) return null
+  const valid = questions.every(
+    ({ question, options } = {}) =>
+      typeof question === 'string' && question.trim() &&
+      Array.isArray(options) && options.length > 0 && options.length <= OPTIONS_MAX &&
+      options.every((option) => typeof option?.label === 'string' && option.label.trim())
+  )
+  if (!valid) return null
+  return questions.map(({ question, multiSelect, options }) => ({
+    question: shorten(question, QUESTION_MAX),
+    multiSelect: multiSelect === true,
+    options: options.map((option) => ({
+      label: shorten(option.label, OPTION_MAX),
+      detail: typeof option.description === 'string' ? shorten(option.description, DETAIL_MAX) : ''
+    }))
+  }))
+}
+
+/**
+ * The keys that answer a form, or null for answers that do not fit it. A number on a question with
+ * one answer moves to the next question by itself; with several answers it only ticks the option,
+ * and Tab moves on. After the last question the menu shows a review page, left for the caller.
+ */
+export function answerKeys(questions, answers) {
+  if (!Array.isArray(questions) || !Array.isArray(answers) || answers.length !== questions.length) return null
+  const keys = []
+  for (const [position, { multiSelect, options }] of questions.entries()) {
+    const chosen = answers[position]
+    if (!Array.isArray(chosen) || chosen.length === 0 || new Set(chosen).size !== chosen.length) return null
+    if (!multiSelect && chosen.length !== 1) return null
+    if (!chosen.every((index) => Number.isInteger(index) && index >= 0 && index < options.length)) return null
+    keys.push(...chosen.map((index) => String(index + 1)))
+    if (multiSelect) keys.push(TAB_KEY)
+  }
+  return keys
+}
+
+async function questionOffer(worktree, readQuestion) {
+  const agent = soleAgent(worktree)
+  if (agent?.agentType !== 'claude' || agent.state !== 'waiting' || agent.toolName !== 'AskUserQuestion') return null
+  const asked = await readQuestion(worktree.path).catch(() => null)
+  const buttons = questionButtons(asked)
+  if (buttons) return { ...base('question', worktree, agent, asked.toolUseId), ...buttons }
+  const questions = questionForm(asked)
+  return questions ? { ...base('form', worktree, agent, asked.toolUseId), questions } : null
+}
+
+export function isDangerous(call) {
+  return call.name === 'Bash' && typeof call.input?.command === 'string' && DANGEROUS_COMMANDS.some((pattern) => pattern.test(call.input.command))
+}
+
+/** What a tool call would do, in a line, and a piece of it that its permission menu shows. */
+function describeCall({ input }) {
+  if (typeof input.command === 'string') {
+    return { summary: shorten(input.command, QUESTION_MAX), menuHint: input.command.trim().split('\n')[0].slice(0, 24) }
+  }
+  if (typeof input.file_path === 'string') {
+    return { summary: shorten(input.file_path, QUESTION_MAX), menuHint: basename(input.file_path) }
+  }
+  return { summary: shorten(JSON.stringify(input), QUESTION_MAX), menuHint: '' }
+}
+
+function permissionCards(stop) {
+  return [
+    { label: '許可', action: 'allow', detail: '今回だけ実行します' },
+    stop
+      ? // Esc ends Codex's turn: unlike Claude Code, it does not go on without the call.
+        { label: '中止', action: 'deny', detail: '実行せず、このターンを止めます' }
+      : { label: '拒否', action: 'deny', detail: '実行しません' }
+  ]
+}
+
+async function permissionOffer(worktree, readCall) {
+  const agent = soleAgent(worktree)
+  if (agent?.agentType !== 'claude' || !PERMISSION_STATES.includes(agent.state) || !agent.toolName || agent.toolName === 'AskUserQuestion') return null
+  // Orca can keep saying "waiting" after the user answered at the terminal. The transcript cannot.
+  const call = await readCall(worktree.path).catch(() => null)
+  if (call?.name !== agent.toolName) return null
+  const { summary, menuHint } = describeCall(call)
+  return {
+    ...base('permission', worktree, agent, call.toolUseId),
+    question: `${call.name} を許可しますか？ ${summary}`,
+    menuHint,
+    dangerous: isDangerous(call),
+    suggestions: permissionCards(false)
+  }
+}
+
+/** Keys are pressed only on Claude Code's menu for this very call, read from the screen just before. */
+export function isPermissionMenu(screen, menuHint) {
+  return ALLOW_ONCE_LINE.test(screen) && screen.includes(PERMISSION_FOOTER) && screen.includes(menuHint)
+}
+
+/** The same for Codex's menu. */
+export function isCodexPermissionMenu(screen, menuHint) {
+  return CODEX_ALLOW_ONCE_LINE.test(screen) && screen.includes(CODEX_PERMISSION_FOOTER) && screen.includes(menuHint)
+}
+
+/** The file a Codex edit would change. A long path is wrapped over several lines of the screen. */
+function codexEditTarget(screen) {
+  const lines = screen.split('\n')
+  const start = lines.findLastIndex((line) => line.trim() === CODEX_DESTINATION)
+  const end = lines.findLastIndex((line) => CODEX_ALLOW_ONCE_LINE.test(line))
+  return start >= 0 && end > start ? lines.slice(start + 1, end).map((line) => line.trim()).join('') : ''
+}
+
+/** Only a shell command and a file edit: the menus of other tools have not been seen. */
+function describeCodexCall(agent, shown) {
+  if (agent.toolName === 'apply_patch') {
+    const target = codexEditTarget(shown)
+    return target ? { what: 'ファイルの編集', summary: shorten(target, QUESTION_MAX), menuHint: CODEX_EDIT_MENU, dangerous: false } : null
+  }
+  if (agent.toolName !== 'Bash' || typeof agent.toolInput !== 'string' || !agent.toolInput.trim()) return null
+  const call = { name: 'Bash', input: { command: agent.toolInput } }
+  return { what: 'Bash', ...describeCall(call), dangerous: isDangerous(call) }
+}
+
+async function codexPermissionOffer(worktree, readPane) {
+  const agent = soleAgent(worktree)
+  if (agent?.agentType !== 'codex' || !PERMISSION_STATES.includes(agent.state) || !agent.toolName) return null
+  // Orca keeps the last toolName after the call, and other prompts also read as waiting. The menu cannot.
+  const shown = await readPane(agent.paneKey).catch(() => null)
+  const call = shown ? describeCodexCall(agent, shown) : null
+  if (!call || !isCodexPermissionMenu(shown, call.menuHint)) return null
+  return {
+    ...base('permission', worktree, agent, call.summary),
+    question: `${call.what} を許可しますか？ ${call.summary}`,
+    menuHint: call.menuHint,
+    dangerous: call.dangerous,
+    suggestions: permissionCards(true)
+  }
+}
+
+/**
+ * What every workspace's agent offers now.
+ * @param readQuestion resolves a workspace path to its Claude session's pending AskUserQuestion
+ * @param readCall     resolves a workspace path to its Claude session's pending tool call
+ * @param readPane     resolves a pane key to what its terminal shows now
+ */
+export async function offersOf(worktrees, { readQuestion = async () => null, readCall = async () => null, readPane = async () => null } = {}) {
+  const offers = []
+  for (const worktree of worktrees) {
+    const offer =
+      nextOffer(worktree) ??
+      (await questionOffer(worktree, readQuestion)) ??
+      (await permissionOffer(worktree, readCall)) ??
+      (await codexPermissionOffer(worktree, readPane))
+    if (offer) offers.push(offer)
+  }
+  return offers
 }
 
 /** A workspace not on screen has no tab for its pane, and its terminal only records the key. */
@@ -81,12 +310,24 @@ function isPane(terminal, paneKey) {
   return terminal.recordedPaneKey === paneKey || `${terminal.tabId}:${terminal.leafId}` === paneKey
 }
 
+async function readScreen(run, handle) {
+  return (await run(['terminal', 'read', '--terminal', handle, '--screen', '--limit', SCREEN_LINES, '--json'])).result.terminal.tail.join('\n')
+}
+
+/** What a pane shows now, or null when no terminal has it. */
+export async function readPaneScreen(run, paneKey) {
+  const { terminals } = (await run(['terminal', 'list', '--json'])).result
+  const terminal = terminals.find((candidate) => isPane(candidate, paneKey))
+  return terminal ? readScreen(run, terminal.handle) : null
+}
+
 /**
  * @param readOffers resolves to the offers of every workspace, read from Orca now
  * @param run        runs the Orca CLI with arguments and resolves to its JSON reply
- * @returns a function that takes `{ offer, index }` and resolves to `{ sent: true }`, or to
- *   `{ sent: false, reason }` with `stale` when that button is no longer on offer and `typing` when
- *   Codex has a draft the prompt would join. It throws when sending fails.
+ * @returns a function that takes `{ offer, index }` for a card, or `{ offer, answers }` for a form,
+ *   and resolves to `{ sent: true }`, or to `{ sent: false, reason }`: `stale` when that card is no
+ *   longer on offer, `typing` when Codex has a draft a prompt would join, `confirm` to allow a
+ *   dangerous command without `confirmed: true`. It throws when sending fails.
  */
 export function createNextSender({ readOffers, run, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
   const used = new Set()
@@ -96,33 +337,65 @@ export function createNextSender({ readOffers, run, wait = (ms) => new Promise((
     if (used.size > USED_MAX) used.delete(used.values().next().value)
   }
 
-  return async function send({ offer, index } = {}) {
-    if (typeof offer !== 'string' || !Number.isInteger(index) || used.has(offer)) return { sent: false, reason: 'stale' }
+  /** Without Enter: a menu takes a number as one key press, and Enter would go on to the next. */
+  async function press(handle, key) {
+    const reply = await run(['terminal', 'send', '--terminal', handle, '--text', key, '--json'])
+    if (!reply.result?.send?.accepted) throw new Error('the terminal did not accept the key')
+  }
+
+  /** Submits only from the review page, so that keys gone astray never answer on their own. */
+  async function answerForm(handle, keys) {
+    for (const key of keys) {
+      await press(handle, key)
+      await wait(KEY_WAIT_MS)
+    }
+    await wait(REVIEW_WAIT_MS)
+    if (!(await readScreen(run, handle)).includes(REVIEW_PAGE)) throw new Error('the menu did not reach its review page')
+    await press(handle, SUBMIT_KEY)
+  }
+
+  async function sendPrompt(found, handle, prompt) {
+    if (found.agent === 'claude') {
+      await press(handle, STASH_KEY)
+      await wait(STASH_WAIT_MS)
+    }
+    const reply = await run(
+      ['terminal', 'send', '--terminal', handle, '--text', prompt, '--enter', '--wait-submit', SUBMIT_WAIT_SECONDS, '--json'],
+      SEND_TIMEOUT_MS
+    )
+    if (!reply.result?.send?.accepted) throw new Error('the terminal did not accept the prompt')
+  }
+
+  return async function send({ offer, index, answers, confirmed = false } = {}) {
+    const stale = { sent: false, reason: 'stale' }
+    if (typeof offer !== 'string' || used.has(offer)) return stale
     const found = (await readOffers()).find((candidate) => candidate.id === offer)
-    const suggestion = found?.suggestions[index]
-    if (!suggestion) return { sent: false, reason: 'stale' }
+    if (!found) return stale
+    const keys = answers !== undefined ? answerKeys(found.questions, answers) : null
+    const suggestion = answers === undefined && Number.isInteger(index) ? found.suggestions?.[index] : null
+    if (!keys && !suggestion) return stale
+    if (suggestion?.action === 'allow' && found.dangerous && confirmed !== true) return { sent: false, reason: 'confirm' }
     const { terminals } = (await run(['terminal', 'list', '--json'])).result
     const terminal = terminals.find((candidate) => isPane(candidate, found.paneKey) && candidate.writable)
-    if (!terminal) return { sent: false, reason: 'stale' }
-    if (found.agent === 'codex') {
-      const screen = (await run(['terminal', 'read', '--terminal', terminal.handle, '--screen', '--limit', '60', '--json'])).result
-      if (!screen.terminal.tail.join('\n').includes(CODEX_EMPTY_HINT)) return { sent: false, reason: 'typing' }
+    if (!terminal) return stale
+    if (suggestion?.action) {
+      const onMenu = found.agent === 'codex' ? isCodexPermissionMenu : isPermissionMenu
+      if (!onMenu(await readScreen(run, terminal.handle), found.menuHint)) return stale
+    }
+    if (found.kind === 'proposal' && found.agent === 'codex' && !(await readScreen(run, terminal.handle)).includes(CODEX_EMPTY_HINT)) {
+      return { sent: false, reason: 'typing' }
     }
     // Checked again here, right before the send: a second press may have arrived during the reads.
-    if (used.has(offer)) return { sent: false, reason: 'stale' }
+    if (used.has(offer)) return stale
     take(offer)
     try {
-      if (found.agent === 'claude') {
-        await run(['terminal', 'send', '--terminal', terminal.handle, '--text', STASH_KEY, '--json'])
-        await wait(STASH_WAIT_MS)
-      }
-      const reply = await run(
-        ['terminal', 'send', '--terminal', terminal.handle, '--text', suggestion.prompt, '--enter', '--wait-submit', SUBMIT_WAIT_SECONDS, '--json'],
-        SEND_TIMEOUT_MS
-      )
-      if (!reply.result?.send?.accepted) throw new Error('the terminal did not accept the prompt')
+      if (keys) await answerForm(terminal.handle, keys)
+      else if (suggestion.action) await press(terminal.handle, suggestion.action === 'allow' ? ALLOW_ONCE_KEY : ESCAPE_KEY)
+      else if (suggestion.keys) await press(terminal.handle, suggestion.keys)
+      else await sendPrompt(found, terminal.handle, suggestion.prompt)
     } catch (error) {
-      used.delete(offer)
+      // A form stopped halfway has options ticked, so pressing the same keys again would untick them.
+      if (!keys) used.delete(offer)
       throw error
     }
     return { sent: true }

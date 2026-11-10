@@ -106,7 +106,7 @@ test('the focused workspace shows its offer as cards, escaped, under its tasks',
   assert.ok(html.includes(`data-next="${offer.id}" data-index="0"`))
   assert.ok(html.includes('&lt;b&gt;直す&lt;/b&gt;'))
   assert.ok(html.includes('<span class="reason">理由 &amp; 背景</span>'))
-  assert.ok(html.indexOf('class="next"') > html.indexOf('<ol><li class="completed">'), 'under the tasks')
+  assert.ok(html.indexOf('class="next proposal"') > html.indexOf('<ol><li class="completed">'), 'under the tasks')
   const elsewhere = renderBody(buildModel({ path: '/work/other', displayName: 'other', agentStates: [] }, [], [], [offer]))
   assert.ok(!elsewhere.includes('data-next'), 'only the focused workspace')
   const noTasks = renderBody(buildModel({ path: '/work/app', displayName: 'app', agentStates: ['done'] }, [], [], [offer]))

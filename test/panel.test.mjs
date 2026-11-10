@@ -133,7 +133,7 @@ test('a pressed card is sent once, and a refusal says why and lets the cards be 
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.deepEqual(requests, [{ offer: 'o1', index: 1 }])
   assert.match(root.querySelector('.status').textContent, /書きかけ/)
-  assert.ok(!root.querySelector('.actions').classList.contains('busy'))
+  assert.ok(!root.querySelector('.next').classList.contains('busy'))
 
   answer = { sent: true }
   a.click()
@@ -141,5 +141,5 @@ test('a pressed card is sent once, and a refusal says why and lets the cards be 
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.equal(requests.length, 2, 'a second click while one is on its way is ignored')
   assert.ok(a.classList.contains('sending'))
-  assert.ok(root.querySelector('.actions').classList.contains('busy'))
+  assert.ok(root.querySelector('.next').classList.contains('busy'))
 })

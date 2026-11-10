@@ -12,6 +12,8 @@ const RETRY_MS = 3000
 const KEEP_ALIVE_MS = 60_000
 
 let pushes = 0
+// Declared before the first body arrives, since each one restores what the user picked in a form.
+const presses = sendOnPress(document.body, (request) => window.orca.plugin.request('next.send', request))
 let loaded = false
 
 const { plugin } = window.orca
@@ -20,6 +22,7 @@ plugin.on('view.changed', ({ html }) => {
   pushes += 1
   loaded = true
   patchChildren(document.body, html)
+  presses.restore()
 })
 
 async function load() {
@@ -27,7 +30,10 @@ async function load() {
   try {
     const { html } = await plugin.request('view.get')
     // A post that arrived while this was on its way is newer.
-    if (pushes === seen) patchChildren(document.body, html)
+    if (pushes === seen) {
+      patchChildren(document.body, html)
+      presses.restore()
+    }
     loaded = true
   } catch (error) {
     console.warn(`milestone: view.get failed: ${error.code ?? error.message}`)
@@ -42,7 +48,6 @@ openOnPress(document.body, (path) => {
   })
 })
 
-sendOnPress(document.body, (request) => plugin.request('next.send', request))
 
 void load()
 setInterval(load, KEEP_ALIVE_MS)

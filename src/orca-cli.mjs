@@ -4,7 +4,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { nextOffer } from './next-actions.mjs'
+import { offersOf } from './next-actions.mjs'
 
 /** The CLI bundled with the Orca app that runs this worker, else `orca` on PATH. */
 export function resolveOrcaCli(execPath = process.execPath) {
@@ -37,10 +37,12 @@ function mainAgents(worktree) {
 
 /**
  * The focused workspace ({ path, displayName, agentStates }, or null), the main agents of every
- * workspace that is not archived, and what each finished agent proposes to do next. Of the prompts
- * and replies, only the block an agent wrote for those buttons is kept.
+ * workspace that is not archived, and what each agent offers to choose from: its proposed next
+ * steps, its question or the tool waiting for permission. Of the prompts and replies, only the
+ * block an agent wrote for those buttons is kept.
+ * @param readers how to read a pending question or call and a pane's screen, see offersOf
  */
-export async function readWorkspaces(cli, run = runOrca) {
+export async function readWorkspaces(cli, run = runOrca, readers = {}) {
   const response = await run(cli, ['worktree', 'ps', '--limit', '1000', '--json'])
   if (!response?.ok) {
     throw new Error(response?.error?.message ?? 'orca worktree ps failed')
@@ -65,6 +67,6 @@ export async function readWorkspaces(cli, run = runOrca) {
         since: agent.stateStartedAt ?? null
       }))
     ),
-    offers: worktrees.map(nextOffer).filter(Boolean)
+    offers: await offersOf(worktrees, readers)
   }
 }

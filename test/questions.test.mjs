@@ -1,0 +1,205 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { JSDOM } from 'jsdom'
+import { pendingCall, pendingQuestion } from '../src/claude-sessions.mjs'
+import { answerKeys, createNextSender, isDangerous, offersOf, questionButtons, questionForm } from '../src/next-actions.mjs'
+import { buildModel } from '../src/model.mjs'
+import { renderBody } from '../src/render.mjs'
+import { sendOnPress } from '../panel/next.mjs'
+
+const line = (content) => JSON.stringify({ type: 'assistant', message: { content } })
+const result = (id) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } })
+const ask = (questions, id = 'toolu_q') => ({ toolUseId: id, questions })
+const option = (label, description = '') => ({ label, description })
+const single = (extra = {}) => ({ question: '公開の時期は？', multiSelect: false, options: [option('今週', 'すぐ'), option('来週')], ...extra })
+const waiting = (extra = {}) => ({ agentType: 'claude', state: 'waiting', toolName: 'AskUserQuestion', paneKey: 'tab:leaf', hasLivePty: true, stateStartedAt: 7, ...extra })
+const worktree = (agents) => ({ path: '/work/app', agents })
+
+test('pendingQuestion and pendingCall find the last call that has no result yet', () => {
+  const asked = line([{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion', input: { questions: [single()] } }])
+  assert.deepEqual(pendingQuestion(`${asked}\n`), { toolUseId: 'q1', questions: [single()] })
+  assert.equal(pendingQuestion(`${asked}\n${result('q1')}\n`), null)
+  const bash = line([{ type: 'tool_use', id: 'b1', name: 'Bash', input: { command: 'ls' } }])
+  assert.deepEqual(pendingCall(`{"broken\n${bash}`), { toolUseId: 'b1', name: 'Bash', input: { command: 'ls' } })
+  assert.equal(pendingCall(`${bash}\n${result('b1')}`), null)
+})
+
+test('one question with one answer becomes cards; anything else a form, within limits', () => {
+  assert.deepEqual(questionButtons(ask([single()])).suggestions.map((s) => [s.label, s.keys]), [['今週', '1'], ['来週', '2']])
+  assert.equal(questionButtons(ask([single({ multiSelect: true })])), null)
+  assert.equal(questionForm(ask([single(), single({ multiSelect: true })])).length, 2)
+  assert.equal(questionForm(ask([single({ options: [] })])), null)
+  assert.equal(questionForm(ask(Array(5).fill(single()))), null)
+})
+
+test('answerKeys ticks then tabs on several answers, and refuses answers that do not fit', () => {
+  const form = questionForm(ask([single({ multiSelect: true }), single()]))
+  assert.deepEqual(answerKeys(form, [[0, 1], [1]]), ['1', '2', '\t', '2'])
+  for (const answers of [[[0]], [[], [0]], [[0, 0], [0]], [[0], [0, 1]], [[2], [0]], [[0.5], [0]], 'x']) {
+    assert.equal(answerKeys(form, answers), null, JSON.stringify(answers))
+  }
+})
+
+test('offersOf reads a question, a form and a permission for the agent waiting on them', async () => {
+  const readQuestion = async () => ask([single()])
+  const [question] = await offersOf([worktree([waiting()])], { readQuestion })
+  assert.equal(question.kind, 'question')
+  assert.equal(question.question, '公開の時期は？')
+
+  const [form] = await offersOf([worktree([waiting()])], { readQuestion: async () => ask([single(), single()]) })
+  assert.equal(form.kind, 'form')
+  assert.equal(form.questions.length, 2)
+
+  const readCall = async () => ({ toolUseId: 'b1', name: 'Bash', input: { command: 'rm -rf build' } })
+  const [permission] = await offersOf([worktree([waiting({ toolName: 'Bash' })])], { readCall })
+  assert.equal(permission.kind, 'permission')
+  assert.equal(permission.question, 'Bash を許可しますか？ rm -rf build')
+  assert.equal(permission.dangerous, true)
+  assert.deepEqual(permission.suggestions.map((s) => s.label), ['許可', '拒否'])
+
+  // The transcript says the call is over or is another one: nothing to press.
+  assert.deepEqual(await offersOf([worktree([waiting({ toolName: 'Bash' })])], { readCall: async () => null }), [])
+  assert.deepEqual(await offersOf([worktree([waiting({ toolName: 'Write' })])], { readCall }), [])
+})
+
+const CODEX_MENU = (command) => `Would you like to run the following command?\n  $ ${command}\n› 1. Yes, proceed (y)\n  2. Yes, and don't ask again (p)\n  3. No, and tell Codex what to do differently (esc)\n  Press enter to confirm or esc to cancel`
+
+test('a Codex permission comes from the menu on its screen, with stop instead of deny', async () => {
+  const codex = waiting({ agentType: 'codex', toolName: 'Bash', toolInput: 'touch a' })
+  const [offer] = await offersOf([worktree([codex])], { readPane: async () => CODEX_MENU('touch a') })
+  assert.deepEqual(offer.suggestions.map((s) => s.label), ['許可', '中止'])
+  assert.deepEqual(await offersOf([worktree([codex])], { readPane: async () => 'Trust this folder?' }), [])
+})
+
+test('isDangerous catches the commands that deserve a second look', () => {
+  for (const command of ['rm -rf x', 'sudo ls', 'git push --force', 'git reset --hard', 'kubectl delete pod a']) {
+    assert.equal(isDangerous({ name: 'Bash', input: { command } }), true, command)
+  }
+  assert.equal(isDangerous({ name: 'Bash', input: { command: 'git push origin main' } }), false)
+})
+
+const MENU = (command) => `Bash command\n ${command}\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and always allow\n   3. Yes, and switch to auto mode\n   4. No\n Esc to cancel · Tab to amend`
+
+function setup(offer, screens) {
+  const keys = []
+  const shown = [...screens]
+  const send = createNextSender({
+    readOffers: async () => [offer],
+    run: async (args) => {
+      if (args[1] === 'list') return { result: { terminals: [{ handle: 'h1', tabId: 'tab', leafId: 'leaf', writable: true }] } }
+      if (args[1] === 'read') return { result: { terminal: { tail: [shown.length > 1 ? shown.shift() : shown[0]] } } }
+      keys.push(args[args.indexOf('--text') + 1])
+      return { result: { send: { accepted: true } } }
+    },
+    wait: async () => {}
+  })
+  return { send, keys }
+}
+
+test('a question card presses its number, and a form presses its keys, then Enter on the review page', async () => {
+  const [question] = await offersOf([worktree([waiting()])], { readQuestion: async () => ask([single()]) })
+  const one = setup(question, [''])
+  assert.deepEqual(await one.send({ offer: question.id, index: 1 }), { sent: true })
+  assert.deepEqual(one.keys, ['2'])
+
+  const [form] = await offersOf([worktree([waiting()])], { readQuestion: async () => ask([single({ multiSelect: true }), single()]) })
+  const many = setup(form, ['Review your answers\n❯ 1. Submit answers'])
+  assert.deepEqual(await many.send({ offer: form.id, answers: [[0, 1], [0]] }), { sent: true })
+  assert.deepEqual(many.keys, ['1', '2', '\t', '1', '\r'])
+  assert.deepEqual(await many.send({ offer: form.id, answers: [[0], [0]] }), { sent: false, reason: 'stale' }, 'sent once')
+
+  const lost = setup(form, ['somewhere else'])
+  await assert.rejects(lost.send({ offer: form.id, answers: [[0], [0]] }))
+  assert.ok(!lost.keys.includes('\r'), 'never submits off the review page')
+})
+
+test('a permission presses 1 or Esc only on its menu, and a dangerous allow needs confirmed', async () => {
+  const offerFor = async (command) =>
+    (await offersOf([worktree([waiting({ toolName: 'Bash' })])], { readCall: async () => ({ toolUseId: 'b', name: 'Bash', input: { command } }) }))[0]
+  const safe = await offerFor('touch a')
+  const allow = setup(safe, [MENU('touch a')])
+  assert.deepEqual(await allow.send({ offer: safe.id, index: 0 }), { sent: true })
+  assert.deepEqual(allow.keys, ['1'])
+  const deny = setup(safe, [MENU('touch a')])
+  await deny.send({ offer: safe.id, index: 1 })
+  assert.deepEqual(deny.keys, ['\u001b'])
+  const elsewhere = setup(safe, [MENU('touch other')])
+  assert.deepEqual(await elsewhere.send({ offer: safe.id, index: 0 }), { sent: false, reason: 'stale' })
+  assert.deepEqual(elsewhere.keys, [])
+
+  const risky = await offerFor('rm -rf build')
+  const confirm = setup(risky, [MENU('rm -rf build')])
+  assert.deepEqual(await confirm.send({ offer: risky.id, index: 0 }), { sent: false, reason: 'confirm' })
+  assert.deepEqual(await confirm.send({ offer: risky.id, index: 0, confirmed: true }), { sent: true })
+  assert.deepEqual(confirm.keys, ['1'])
+})
+
+test('the panel shows a question, a form and a permission in their own cards', async () => {
+  const focused = { path: '/work/app', displayName: 'app', agentStates: ['waiting'] }
+  const show = async (agent, readers) => renderBody(buildModel(focused, [], [], await offersOf([worktree([agent])], readers)))
+  const question = await show(waiting(), { readQuestion: async () => ask([single({ question: '<いつ>' })]) })
+  assert.ok(question.includes('<p class="ask">&lt;いつ&gt;</p>'))
+  assert.ok(question.includes('data-index="1"'))
+  const form = await show(waiting(), { readQuestion: async () => ask([single({ multiSelect: true }), single()]) })
+  assert.ok(form.includes('複数選択できます'))
+  assert.ok(form.includes('data-question="1" data-option="1" data-multi="0"'))
+  assert.ok(form.includes('data-count="2" disabled>回答を送信'))
+  const permission = await show(waiting({ toolName: 'Bash' }), { readCall: async () => ({ toolUseId: 'b', name: 'Bash', input: { command: 'sudo ls' } }) })
+  assert.ok(permission.includes('危険なコマンド'))
+  assert.ok(permission.includes('data-index="0" data-dangerous="1"'))
+  assert.ok(!permission.includes('data-index="1" data-dangerous'), 'only allowing asks twice')
+})
+
+function panel(html) {
+  const { document } = new JSDOM('<!doctype html><body></body>').window
+  document.body.innerHTML = html
+  return document.body
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+test('a form is ticked in the panel, kept across patches, and sent with its button', async () => {
+  const focused = { path: '/work/app', displayName: 'app', agentStates: ['waiting'] }
+  const offers = await offersOf([worktree([waiting()])], { readQuestion: async () => ask([single({ multiSelect: true }), single()]) })
+  const html = renderBody(buildModel(focused, [], [], offers))
+  const root = panel(html)
+  const requests = []
+  const presses = sendOnPress(root, async (request) => {
+    requests.push(request)
+    return { sent: true }
+  })
+  const option = (q, o) => root.querySelector(`[data-question="${q}"][data-option="${o}"]`)
+  const submit = root.querySelector('[data-submit]')
+  option(0, 1).click()
+  option(0, 0).click()
+  assert.equal(submit.disabled, true, 'every question needs an answer')
+  option(1, 0).click()
+  option(1, 1).click()
+  assert.ok(!option(1, 0).classList.contains('chosen'), 'one answer replaces the other')
+  assert.equal(submit.disabled, false)
+
+  // A new body from the worker would drop the ticks; they come back.
+  root.innerHTML = html
+  presses.restore()
+  assert.ok(option(0, 0).classList.contains('chosen') && option(0, 1).classList.contains('chosen'))
+  root.querySelector('[data-submit]').click()
+  await settle()
+  assert.deepEqual(requests, [{ offer: offers[0].id, answers: [[0, 1], [1]] }])
+})
+
+test('allowing a dangerous command takes a second press, which sends it confirmed', async () => {
+  const root = panel('<div class="next"><ol class="actions"><li><button data-next="o1" data-index="0" data-dangerous="1">許可</button></li></ol></div>')
+  const requests = []
+  sendOnPress(root, async (request) => {
+    requests.push(request)
+    return { sent: true }
+  })
+  const allow = root.querySelector('[data-next]')
+  allow.click()
+  await settle()
+  assert.deepEqual(requests, [])
+  assert.match(root.querySelector('.status').textContent, /もう一度/)
+  allow.click()
+  await settle()
+  assert.deepEqual(requests, [{ offer: 'o1', index: 0, confirmed: true }])
+})
