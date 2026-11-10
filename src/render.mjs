@@ -44,18 +44,53 @@ function renderSession(session) {
 <ol>${session.tasks.map(renderTask).join('')}</ol></section>`
 }
 
-/**
- * What the agent proposes to do next, one card under another. A card says which offer and which
- * button; the worker reads the prompt again when it is pressed.
- */
-function renderNext(next) {
-  if (!next || next.suggestions.length === 0) return ''
-  const cards = next.suggestions.map((suggestion, index) => {
-    const reason = suggestion.reason ? `<span class="reason">${escape(suggestion.reason)}</span>` : ''
-    return `<li><button type="button" class="action" data-next="${escape(next.id)}" data-index="${index}"><span class="label">${escape(suggestion.label)}</span>${reason}<span class="prompt">${escape(clip(suggestion.prompt, PROMPT_LINES_MAX))}</span></button></li>`
+function card(offerId, index, label, lines, extra = '') {
+  const body = lines.filter(([, text]) => text).map(([kind, text]) => `<span class="${kind}">${escape(text)}</span>`).join('')
+  return `<li><button type="button" class="action" data-next="${escape(offerId)}" data-index="${index}"${extra}><span class="label">${escape(label)}</span>${body}</button></li>`
+}
+
+function renderForm(offer) {
+  const questions = offer.questions.map((question, position) => {
+    const options = question.options.map((option, index) =>
+      `<li><button type="button" class="action option" data-form="${escape(offer.id)}" data-question="${position}" data-option="${index}" data-multi="${question.multiSelect ? '1' : '0'}"><span class="label">${escape(option.label)}</span>${option.detail ? `<span class="detail">${escape(option.detail)}</span>` : ''}</button></li>`
+    )
+    const hint = question.multiSelect ? '<p class="hint">複数選択できます</p>' : ''
+    return `<div class="question"><p class="ask">${escape(question.question)}</p>${hint}<ol class="actions">${options.join('')}</ol></div>`
   })
+  return `${questions.join('')}<button type="button" class="submit" data-submit="${escape(offer.id)}" data-count="${offer.questions.length}" disabled>回答を送信</button>`
+}
+
+/**
+ * What the agent offers to choose from, one card under another: its next steps, its question or a
+ * tool waiting for permission. A card says which offer and which card; the worker reads the agent
+ * again when it is pressed.
+ */
+function renderNext(offer) {
+  if (!offer) return ''
+  let heading
+  let body
+  if (offer.kind === 'form') {
+    heading = '<h2>質問に答える</h2>'
+    body = renderForm(offer)
+  } else if (offer.kind === 'question') {
+    heading = '<h2>質問に答える</h2>'
+    const cards = offer.suggestions.map((s, index) => card(offer.id, index, s.label, [['detail', s.detail]]))
+    body = `<p class="ask">${escape(offer.question)}</p><ol class="actions">${cards.join('')}</ol>`
+  } else if (offer.kind === 'permission') {
+    heading = `<h2>許可の確認${offer.dangerous ? '<span class="danger">危険なコマンド</span>' : ''}</h2>`
+    const cards = offer.suggestions.map((s, index) =>
+      card(offer.id, index, s.label, [['detail', s.detail]], s.action === 'allow' && offer.dangerous ? ' data-dangerous="1"' : '')
+    )
+    body = `<p class="ask">${escape(offer.question)}</p><ol class="actions">${cards.join('')}</ol>`
+  } else {
+    heading = '<h2>次の作業<span>選ばなくても構いません</span></h2>'
+    const cards = offer.suggestions.map((s, index) =>
+      card(offer.id, index, s.label, [['reason', s.reason], ['prompt', clip(s.prompt, PROMPT_LINES_MAX)]])
+    )
+    body = `<ol class="actions">${cards.join('')}</ol>`
+  }
   // Another offer is another set of cards: it replaces the old one without a transition.
-  return `<div class="next" data-key="${escape(`next\n${next.id}`)}"><h2>次の作業<span>選ばなくても構いません</span></h2><ol class="actions">${cards.join('')}</ol></div>`
+  return `<div class="next ${offer.kind}" data-key="${escape(`next\n${offer.id}`)}">${heading}${body}</div>`
 }
 
 function renderRow(row) {

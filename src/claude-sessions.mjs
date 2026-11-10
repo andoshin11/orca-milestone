@@ -14,6 +14,8 @@ const TEAM_LIST_ID = /^session-([0-9a-f]{8})$/
 // The first user prompt sits near the top; big transcripts are never read whole.
 const TRANSCRIPT_HEAD_BYTES = 512 * 1024
 const TRANSCRIPT_CHUNK_BYTES = 1024 * 1024
+// A pending tool call is among the last lines of its transcript.
+const TRANSCRIPT_TAIL_BYTES = 1024 * 1024
 
 export function claudePaths(home) {
   return {
@@ -361,4 +363,88 @@ export async function readTranscriptHead(path) {
     if (head.cwd && head.goal) break
   }
   return head
+}
+
+/** The running Claude sessions with the folder each works in. */
+async function readRunningSessions(sessionsRoot) {
+  let names
+  try {
+    names = await readdir(sessionsRoot)
+  } catch {
+    return []
+  }
+  const sessions = []
+  for (const name of names) {
+    if (!/^\d+\.json$/.test(name)) continue
+    const entry = await readJson(join(sessionsRoot, name))
+    if (entry && isSessionId(entry.sessionId) && Number.isInteger(entry.pid) && isRunning(entry.pid) && typeof entry.cwd === 'string') {
+      sessions.push({ sessionId: entry.sessionId, cwd: entry.cwd })
+    }
+  }
+  return sessions
+}
+
+async function readTail(path) {
+  const file = await open(path, 'r')
+  try {
+    const { size } = await file.stat()
+    const length = Math.min(size, TRANSCRIPT_TAIL_BYTES)
+    const buffer = Buffer.alloc(length)
+    const { bytesRead } = await file.read(buffer, 0, length, size - length)
+    return buffer.subarray(0, bytesRead).toString('utf8')
+  } finally {
+    await file.close()
+  }
+}
+
+/** The last tool call that matches, from the lines of a transcript, while it has no result yet. */
+function pendingToolUse(text, matches) {
+  const answered = new Set()
+  for (const line of text.split('\n').toReversed()) {
+    if (!line.includes('tool_')) continue
+    let entry
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      // The tail can begin in the middle of a line.
+      continue
+    }
+    const content = Array.isArray(entry.message?.content) ? entry.message.content : []
+    for (const part of content.toReversed()) {
+      if (part?.type === 'tool_result') answered.add(part.tool_use_id)
+      if (part?.type === 'tool_use' && matches(part)) return answered.has(part.id) ? null : part
+    }
+  }
+  return null
+}
+
+/** The AskUserQuestion call without a result. Only the last counts: an earlier one was abandoned. */
+export function pendingQuestion(text) {
+  const part = pendingToolUse(text, (candidate) => candidate.name === 'AskUserQuestion')
+  return part ? { toolUseId: part.id, questions: part.input?.questions ?? [] } : null
+}
+
+/** The last tool call in a transcript, when it has no result yet: the one waiting for permission. */
+export function pendingCall(text) {
+  const part = pendingToolUse(text, () => true)
+  return part ? { toolUseId: part.id, name: part.name, input: part.input ?? {} } : null
+}
+
+/**
+ * Reads, for a workspace path, what `pick` finds in the transcript of the Claude session running
+ * there. Null when none or more than one session there has one: another Claude in the same folder,
+ * started outside Orca, could be the one asking.
+ */
+export function createPendingReader(home, pick) {
+  const { projectsRoot, sessionsRoot } = claudePaths(home)
+  return async function readPending(path) {
+    const inside = (await readRunningSessions(sessionsRoot)).filter((entry) => entry.cwd === path || entry.cwd.startsWith(`${path}/`))
+    const pending = []
+    for (const { sessionId } of inside) {
+      const transcript = await findTranscript(projectsRoot, sessionId)
+      const found = transcript ? pick(await readTail(transcript).catch(() => '')) : null
+      if (found) pending.push(found)
+    }
+    return pending.length === 1 ? pending[0] : null
+  }
 }

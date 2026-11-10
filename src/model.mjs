@@ -74,7 +74,7 @@ function buildOthers(agents, sessions) {
  * @param workspace { path, displayName, agentStates } of the focused workspace, or null
  * @param sessions  [{ listId, cwd, goal, tasks, updatedAt }] of every workspace, newest first
  * @param agents    [{ workspace, repo, path, focused, state, since }] Orca runs, one per Claude or Codex agent
- * @param offers    [{ id, path, suggestions }] what finished agents propose to do next
+ * @param offers    [{ kind, id, path, ... }] what agents offer to choose from, see next-actions.mjs
  */
 export function buildModel(workspace, sessions, agents = [], offers = []) {
   const others = buildOthers(agents, sessions)
