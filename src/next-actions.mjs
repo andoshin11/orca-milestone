@@ -7,6 +7,7 @@
 // an earlier turn does nothing, and keys go to a menu only after its screen is read.
 import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
+import { riskOf, whereOf } from './risk.mjs'
 
 const SUGGESTIONS_MAX = 3
 const LABEL_MAX = 30
@@ -250,6 +251,8 @@ async function permissionOffer(worktree, readCall, readPane) {
     ...base('permission', worktree, agent, call.toolUseId),
     question: `${call.name} を許可しますか？ ${summary}`,
     menuHint,
+    risk: riskOf(call),
+    where: whereOf(call, worktree.path),
     dangerous: isDangerous(call),
     suggestions: permissionCards(false)
   }
@@ -274,14 +277,14 @@ function codexEditTarget(screen) {
 }
 
 /** Only a shell command and a file edit: the menus of other tools have not been seen. */
-function describeCodexCall(agent, shown) {
+function describeCodexCall(worktree, agent, shown) {
   if (agent.toolName === 'apply_patch') {
     const target = codexEditTarget(shown)
-    return target ? { what: 'ファイルの編集', summary: shorten(target, QUESTION_MAX), menuHint: CODEX_EDIT_MENU, dangerous: false } : null
+    return target ? { what: 'ファイルの編集', summary: shorten(target, QUESTION_MAX), menuHint: CODEX_EDIT_MENU, risk: 'write', where: '', dangerous: false } : null
   }
   if (agent.toolName !== 'Bash' || typeof agent.toolInput !== 'string' || !agent.toolInput.trim()) return null
   const call = { name: 'Bash', input: { command: agent.toolInput } }
-  return { what: 'Bash', ...describeCall(call), dangerous: isDangerous(call) }
+  return { what: 'Bash', ...describeCall(call), risk: riskOf(call), where: whereOf(call, worktree.path), dangerous: isDangerous(call) }
 }
 
 async function codexPermissionOffer(worktree, readPane) {
@@ -289,12 +292,14 @@ async function codexPermissionOffer(worktree, readPane) {
   if (agent?.agentType !== 'codex' || !PERMISSION_STATES.includes(agent.state) || !agent.toolName) return null
   // Orca keeps the last toolName after the call, and other prompts also read as waiting. The menu cannot.
   const shown = await readPane(agent.paneKey).catch(() => null)
-  const call = shown ? describeCodexCall(agent, shown) : null
+  const call = shown ? describeCodexCall(worktree, agent, shown) : null
   if (!call || !isCodexPermissionMenu(shown, call.menuHint)) return null
   return {
     ...base('permission', worktree, agent, call.summary),
     question: `${call.what} を許可しますか？ ${call.summary}`,
     menuHint: call.menuHint,
+    risk: call.risk,
+    where: call.where,
     dangerous: call.dangerous,
     suggestions: permissionCards(true)
   }

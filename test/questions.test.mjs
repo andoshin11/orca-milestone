@@ -22,6 +22,8 @@ test('pendingQuestion and pendingCall find the last call that has no result yet'
   const bash = line([{ type: 'tool_use', id: 'b1', name: 'Bash', input: { command: 'ls' } }])
   assert.deepEqual(pendingCall(`{"broken\n${bash}`), { toolUseId: 'b1', name: 'Bash', input: { command: 'ls' } })
   assert.equal(pendingCall(`${bash}\n${result('b1')}`), null)
+  const inFolder = JSON.stringify({ ...JSON.parse(bash), cwd: '/w/a/apps' })
+  assert.equal(pendingCall(inFolder).cwd, '/w/a/apps', 'the folder the shell was in')
 })
 
 test('one question with one answer becomes cards; anything else a form, within limits', () => {
@@ -158,6 +160,13 @@ test('the panel shows a question, a form and a permission in their own cards', a
   assert.ok(permission.includes('危険なコマンド'))
   assert.ok(permission.includes('data-index="0" data-dangerous="1"'))
   assert.ok(!permission.includes('data-index="1" data-dangerous'), 'only allowing asks twice')
+
+  const elsewhere = await show(waiting({ toolName: 'Bash' }), { readCall: async () => ({ toolUseId: 'c', name: 'Bash', input: { command: 'git push' }, cwd: '/work/app/apps/web' }) })
+  assert.ok(elsewhere.includes('<span class="risk outside">外に出る</span>'))
+  assert.ok(elsewhere.includes('<p class="where">場所: apps/web</p>'))
+  const reading = await show(waiting({ toolName: 'Bash' }), { readCall: async () => ({ toolUseId: 'd', name: 'Bash', input: { command: 'git status' } }) })
+  assert.ok(reading.includes('<span class="risk read">読むだけ</span>'))
+  assert.ok(!reading.includes('class="where"'), 'no place when it runs in the workspace')
 })
 
 function panel(html) {
