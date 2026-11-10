@@ -95,6 +95,10 @@ function renderNext(offer) {
     )
     body = `<ol class="actions">${cards.join('')}</ol>`
   }
+  // What the rest of this turn allowed without a card, to be read afterwards.
+  if (offer.allowed?.length > 0) {
+    body += `<div class="allowed"><p>このターンでまとめて許可したもの</p><ul>${offer.allowed.map((line) => `<li>${escape(line)}</li>`).join('')}</ul></div>`
+  }
   // Another offer is another set of cards: it replaces the old one without a transition.
   return `<div class="next ${offer.kind}" data-key="${escape(`next\n${offer.id}`)}">${heading}${body}</div>`
 }

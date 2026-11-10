@@ -23,7 +23,8 @@ import {
 import { readCodexProgress } from './codex-progress.mjs'
 import { buildModel } from './model.mjs'
 import { createNextSender, readPaneScreen, readTerminalScreen } from './next-actions.mjs'
-import { createLaunchReader, createRestarter } from './restart.mjs'
+import { createLaunchInfoReader, createLaunchReader, createRestarter } from './restart.mjs'
+import { createGrantAccess } from './turn-grant.mjs'
 import { readWorkspaces, runOrca } from './orca-cli.mjs'
 import { progressDir } from './progress-server.mjs'
 import { renderBody } from './render.mjs'
@@ -62,6 +63,8 @@ export function createMilestoneWorker({
   const runArgs = (args, timeout) => runCli(cli, args, timeout)
   // A question or a call waiting for permission is read from the transcript of Claude's session,
   // a Codex menu from the screen of its pane.
+  const readLaunchInfo = createLaunchInfoReader(home)
+  const grants = createGrantAccess(home)
   const readers = {
     readQuestion: createPendingReader(home, pendingQuestion),
     readCall: createPendingReader(home, pendingCall),
@@ -69,7 +72,9 @@ export function createMilestoneWorker({
     readTurnEnded: createPendingReader(home, turnEnded),
     readPane: (paneKey) => readPaneScreen(runArgs, paneKey),
     // A Claude session started with older instructions than the launch hook gives now.
-    readLaunch: createLaunchReader(home)
+    readLaunch: createLaunchReader(home, { readLaunchInfo }),
+    readLaunchInfo,
+    readAllowed: (sessionId) => grants.allowed(sessionId)
   }
   let lastHtml = null
   let started = null
@@ -234,6 +239,7 @@ export function createMilestoneWorker({
   const sendOffer = createNextSender({
     readOffers: async () => (await readOrca(cli, runCli, readers)).offers ?? [],
     run: runArgs,
+    grantRest: (sessionId) => grants.grant(sessionId),
     restart: createRestarter({ home, run: runArgs, readLaunch: readers.readLaunch, readScreen: (handle) => readTerminalScreen(runArgs, handle) })
   })
 

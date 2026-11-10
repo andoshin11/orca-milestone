@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { claudeInstructions } from '../src/launch-hook.mjs'
+import { claudeInstructions, launchSignature } from '../src/launch-hook.mjs'
 import { createNextSender, nextOffer, offersOf } from '../src/next-actions.mjs'
 import { buildModel } from '../src/model.mjs'
 import { renderBody } from '../src/render.mjs'
@@ -15,7 +15,8 @@ const screen = (typed = '') => `● できました\n${RULE}\n❯ ${typed}\n${RU
 
 test('a session is stale unless it was told what the plugin says now', () => {
   assert.equal(isStale(OLD_ARGS), true)
-  assert.equal(isStale(`claude --append-system-prompt ${claudeInstructions()} --resume ${SESSION}`), false)
+  assert.equal(isStale(`claude --append-system-prompt ${claudeInstructions()} --resume ${SESSION}`), true, 'without the permission hook')
+  assert.equal(isStale(`claude --append-system-prompt ${launchSignature().join(' --settings ')} --resume ${SESSION}`), false)
 })
 
 test('the resumed command keeps the permissions, the model and the plugin folder, and gets the new words', () => {
