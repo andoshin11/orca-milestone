@@ -4,7 +4,11 @@
 // - A form's options are ticked here and sent together with its button. The worker's bodies would
 //   drop the ticks, so they are kept per form and put back after every patch (`restore`).
 // - Allowing a dangerous command takes two presses: the first only asks for the second.
+// - Cards that just came take no presses for a moment (`settling`). Answering one permission often
+//   puts the next in the same place, and a quick second click would answer that one unread.
 // Listeners sit on the root, so they keep working however the cards are patched.
+
+export const SETTLE_MS = 1500
 
 const MESSAGES = {
   stale: 'この選択肢はもう使えません。エージェントが先に進んだか、すでに押されています。',
@@ -25,10 +29,36 @@ function showStatus(within, text) {
   status.textContent = text
 }
 
-export function sendOnPress(root, send) {
+/** The offer a card, an option or a form's button belongs to. */
+function offerOf(element) {
+  return element.getAttribute('data-next') ?? element.getAttribute('data-form') ?? element.getAttribute('data-submit')
+}
+
+export function sendOnPress(root, send, { now = () => Date.now(), settleMs = SETTLE_MS, later = setTimeout } = {}) {
   // Ticks per form, by offer: an array of option sets, one per question.
   const picks = new Map()
+  // When each offer on screen first showed.
+  const arrived = new Map()
   let busy = false
+
+  const settling = (offer) => now() - (arrived.get(offer) ?? -Infinity) < settleMs
+  // Cards already there when this starts listening did not just come.
+  for (const element of root.querySelectorAll('[data-next], [data-form], [data-submit]')) arrived.set(offerOf(element), -Infinity)
+
+  /** Notes the offers that just came, and marks their cards while they take no presses. */
+  function settle() {
+    const shown = new Set([...root.querySelectorAll('[data-next], [data-form], [data-submit]')].map(offerOf))
+    for (const offer of arrived.keys()) if (!shown.has(offer)) arrived.delete(offer)
+    for (const offer of shown) {
+      if (arrived.has(offer)) continue
+      arrived.set(offer, now())
+      later(settle, settleMs + 50)
+    }
+    for (const next of root.querySelectorAll('.next')) {
+      const offers = [...next.querySelectorAll('[data-next], [data-form], [data-submit]')].map(offerOf)
+      next.classList.toggle('settling', offers.some(settling))
+    }
+  }
 
   async function deliver(element, request) {
     busy = true
@@ -53,6 +83,7 @@ export function sendOnPress(root, send) {
   }
 
   function restore() {
+    settle()
     for (const button of root.querySelectorAll('[data-option]')) {
       const chosen = picks.get(button.getAttribute('data-form'))?.[Number(button.getAttribute('data-question'))]
       button.classList.toggle('chosen', Boolean(chosen?.has(Number(button.getAttribute('data-option')))))
@@ -79,6 +110,8 @@ export function sendOnPress(root, send) {
 
   root.addEventListener('click', (event) => {
     if (busy) return
+    const pressed = event.target.closest('[data-next], [data-form], [data-submit]')
+    if (pressed && settling(offerOf(pressed))) return
     const option = event.target.closest('[data-option]')
     if (option) {
       pick(option)

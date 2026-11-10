@@ -143,3 +143,51 @@ test('a pressed card is sent once, and a refusal says why and lets the cards be 
   assert.ok(a.classList.contains('sending'))
   assert.ok(root.querySelector('.next').classList.contains('busy'))
 })
+
+test('a card that just came in the place of the answered one takes no presses for a moment', async () => {
+  const { sendOnPress } = await import('../panel/next.mjs')
+  const { patchChildren } = await import('../panel/patch.mjs')
+  const cards = (offer) => `<main><div class="next" data-key="next\n${offer}"><ol class="actions"><li><button data-next="${offer}" data-index="0">許可</button></li><li><button data-next="${offer}" data-index="1">拒否</button></li></ol></div></main>`
+  const root = body('')
+  let time = 0
+  const timers = []
+  const requests = []
+  const presses = sendOnPress(root, async (request) => {
+    requests.push(request)
+    return { sent: true }
+  }, { now: () => time, settleMs: 1500, later: (run) => timers.push(run) })
+  const show = (offer) => {
+    patchChildren(root, cards(offer))
+    presses.restore()
+  }
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  show('first')
+  assert.ok(root.querySelector('.next').classList.contains('settling'))
+  root.querySelector('[data-next]').click()
+  await flush()
+  assert.deepEqual(requests, [], 'a card is not pressed before it can be read')
+
+  time = 1500
+  timers.splice(0).forEach((run) => run())
+  assert.ok(!root.querySelector('.next').classList.contains('settling'))
+  root.querySelector('[data-next]').click()
+  await flush()
+  assert.deepEqual(requests, [{ offer: 'first', index: 0 }])
+
+  time = 2000
+  show('second')
+  assert.ok(root.querySelector('.next').classList.contains('settling'), 'the mark survives the patch')
+  root.querySelector('[data-next]').click()
+  await flush()
+  assert.equal(requests.length, 1, 'a quick second click does not answer the next one')
+
+  time = 2400
+  show('second')
+  assert.ok(root.querySelector('.next').classList.contains('settling'), 'another patch does not restart or lose the wait')
+  time = 3500
+  timers.splice(0).forEach((run) => run())
+  root.querySelectorAll('[data-next]')[1].click()
+  await flush()
+  assert.deepEqual(requests[1], { offer: 'second', index: 1 })
+})
