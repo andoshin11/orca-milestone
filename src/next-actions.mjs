@@ -2,6 +2,7 @@
 // - a proposal: the next steps it wrote at the end of its reply (the block the launch hook asks for)
 // - a question: Claude Code's AskUserQuestion, as cards, or as a form for several questions or answers
 // - a permission: a tool waiting to be allowed, in Claude Code or Codex
+// - a restart: a waiting Claude session told something older than the plugin says now, see restart.mjs
 // The rules match agent-status-panel, which shows the same choices on a phone. The panel says only
 // which offer and which card: the worker reads the agent again when one is pressed, so a card from
 // an earlier turn does nothing, and keys go to a menu only after its screen is read.
@@ -123,12 +124,28 @@ function base(kind, worktree, agent, extra) {
   return { kind, id: offerId(agent, extra), path: worktree.path, agent: agent.agentType, paneKey: agent.paneKey }
 }
 
-/** What a workspace's agent proposes now: only one that finished its turn. */
-export function nextOffer(worktree) {
+const RESTART_CARD = { label: '最新の指示で再開', action: 'restart', detail: '同じ会話のまま、いまの plugin の指示で起動し直します' }
+
+/**
+ * What a workspace's agent proposes now: only one that finished its turn. A Claude session told
+ * something older gets one more card, to start it again under what the plugin says now.
+ * @param launch { sessionId } of that session, or null
+ */
+export function nextOffer(worktree, launch = null) {
   const agent = soleAgent(worktree)
   if (agent?.state !== 'done') return null
   const suggestions = parseSuggestions(agent.lastAssistantMessage)
-  return suggestions.length > 0 ? { ...base('proposal', worktree, agent), suggestions } : null
+  const restart = launch && agent.agentType === 'claude' && !agent.background
+  if (restart) suggestions.push(RESTART_CARD)
+  if (suggestions.length === 0) return null
+  return { ...base('proposal', worktree, agent, restart ? launch.sessionId : ''), suggestions, ...(restart ? { sessionId: launch.sessionId } : {}) }
+}
+
+/** Only for the workspace on screen, the one whose cards show, and only while Claude waits idle. */
+async function launchOf(worktree, readLaunch) {
+  const agent = soleAgent(worktree)
+  if (!worktree.isActive || agent?.agentType !== 'claude' || agent.state !== 'done' || agent.background) return null
+  return readLaunch(worktree.path).catch(() => null)
 }
 
 /**
@@ -310,12 +327,13 @@ async function codexPermissionOffer(worktree, readPane) {
  * @param readQuestion resolves a workspace path to its Claude session's pending AskUserQuestion
  * @param readCall     resolves a workspace path to its Claude session's pending tool call
  * @param readPane     resolves a pane key to what its terminal shows now
+ * @param readLaunch   resolves a workspace path to its Claude session told something older, see restart.mjs
  */
-export async function offersOf(worktrees, { readQuestion = async () => null, readCall = async () => null, readPane = async () => null } = {}) {
+export async function offersOf(worktrees, { readQuestion = async () => null, readCall = async () => null, readPane = async () => null, readLaunch = async () => null } = {}) {
   const offers = []
   for (const worktree of worktrees) {
     const offer =
-      nextOffer(worktree) ??
+      nextOffer(worktree, await launchOf(worktree, readLaunch)) ??
       (await questionOffer(worktree, readQuestion)) ??
       (await permissionOffer(worktree, readCall, readPane)) ??
       (await codexPermissionOffer(worktree, readPane))
@@ -327,6 +345,10 @@ export async function offersOf(worktrees, { readQuestion = async () => null, rea
 /** A workspace not on screen has no tab for its pane, and its terminal only records the key. */
 function isPane(terminal, paneKey) {
   return terminal.recordedPaneKey === paneKey || `${terminal.tabId}:${terminal.leafId}` === paneKey
+}
+
+export async function readTerminalScreen(run, handle) {
+  return readScreen(run, handle)
 }
 
 async function readScreen(run, handle) {
@@ -346,9 +368,10 @@ export async function readPaneScreen(run, paneKey) {
  * @returns a function that takes `{ offer, index }` for a card, or `{ offer, answers }` for a form,
  *   and resolves to `{ sent: true }`, or to `{ sent: false, reason }`: `stale` when that card is no
  *   longer on offer, `typing` when Codex has a draft a prompt would join, `confirm` to allow a
- *   dangerous command without `confirmed: true`. It throws when sending fails.
+ *   dangerous command without `confirmed: true`, or what `restart` resolves to. It throws when sending fails.
+ * @param restart    starts a session again, see restart.mjs
  */
-export function createNextSender({ readOffers, run, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
+export function createNextSender({ readOffers, run, restart = async () => ({ sent: false, reason: 'stale' }), wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
   const used = new Set()
 
   function take(offer) {
@@ -397,6 +420,18 @@ export function createNextSender({ readOffers, run, wait = (ms) => new Promise((
     const { terminals } = (await run(['terminal', 'list', '--json'])).result
     const terminal = terminals.find((candidate) => isPane(candidate, found.paneKey) && candidate.writable)
     if (!terminal) return stale
+    if (suggestion?.action === 'restart') {
+      if (used.has(offer)) return stale
+      take(offer)
+      try {
+        const result = await restart(found, terminal)
+        if (!result.sent) used.delete(offer)
+        return result
+      } catch (error) {
+        used.delete(offer)
+        throw error
+      }
+    }
     if (suggestion?.action) {
       const onMenu = found.agent === 'codex' ? isCodexPermissionMenu : isPermissionMenu
       if (!onMenu(await readScreen(run, terminal.handle), found.menuHint)) return stale

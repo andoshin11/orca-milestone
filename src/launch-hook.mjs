@@ -34,6 +34,11 @@ const CLAUDE_INSTRUCTIONS = [
   NEXT_INSTRUCTIONS
 ].join(' ')
 
+/** What a Claude session started now is told, so that one told something older can be found. */
+export function claudeInstructions() {
+  return CLAUDE_INSTRUCTIONS
+}
+
 /**
  * Adds the instructions to a command line that starts with claude, or with the `orca claude-teams`
  * that Orca runs for Agent Teams and that hands its arguments on to claude. Anything else is left alone.

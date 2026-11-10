@@ -366,7 +366,7 @@ export async function readTranscriptHead(path) {
 }
 
 /** The running Claude sessions with the folder each works in. */
-async function readRunningSessions(sessionsRoot) {
+export async function readRunningSessions(sessionsRoot) {
   let names
   try {
     names = await readdir(sessionsRoot)
@@ -378,7 +378,7 @@ async function readRunningSessions(sessionsRoot) {
     if (!/^\d+\.json$/.test(name)) continue
     const entry = await readJson(join(sessionsRoot, name))
     if (entry && isSessionId(entry.sessionId) && Number.isInteger(entry.pid) && isRunning(entry.pid) && typeof entry.cwd === 'string') {
-      sessions.push({ sessionId: entry.sessionId, cwd: entry.cwd })
+      sessions.push({ sessionId: entry.sessionId, cwd: entry.cwd, pid: entry.pid })
     }
   }
   return sessions
