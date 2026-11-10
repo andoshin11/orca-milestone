@@ -225,12 +225,26 @@ function permissionCards(stop) {
   ]
 }
 
-async function permissionOffer(worktree, readCall) {
+/**
+ * The call a Claude Code menu asks about. The transcript says best, and it cannot say "waiting" after
+ * the user answered at the terminal, as Orca can. But while several calls of one turn wait, Claude
+ * Code has written none of them yet: then a shell command is taken from Orca, and only while its
+ * menu is on the screen.
+ */
+async function claudeCall(worktree, agent, readCall, readPane) {
+  const call = await readCall(worktree.path).catch(() => null)
+  if (call) return call.name === agent.toolName ? call : null
+  if (agent.toolName !== 'Bash' || typeof agent.toolInput !== 'string' || !agent.toolInput.trim()) return null
+  const fromOrca = { toolUseId: agent.toolInput, name: 'Bash', input: { command: agent.toolInput } }
+  const shown = await readPane(agent.paneKey).catch(() => null)
+  return shown && isPermissionMenu(shown, describeCall(fromOrca).menuHint) ? fromOrca : null
+}
+
+async function permissionOffer(worktree, readCall, readPane) {
   const agent = soleAgent(worktree)
   if (agent?.agentType !== 'claude' || !PERMISSION_STATES.includes(agent.state) || !agent.toolName || agent.toolName === 'AskUserQuestion') return null
-  // Orca can keep saying "waiting" after the user answered at the terminal. The transcript cannot.
-  const call = await readCall(worktree.path).catch(() => null)
-  if (call?.name !== agent.toolName) return null
+  const call = await claudeCall(worktree, agent, readCall, readPane)
+  if (!call) return null
   const { summary, menuHint } = describeCall(call)
   return {
     ...base('permission', worktree, agent, call.toolUseId),
@@ -298,7 +312,7 @@ export async function offersOf(worktrees, { readQuestion = async () => null, rea
     const offer =
       nextOffer(worktree) ??
       (await questionOffer(worktree, readQuestion)) ??
-      (await permissionOffer(worktree, readCall)) ??
+      (await permissionOffer(worktree, readCall, readPane)) ??
       (await codexPermissionOffer(worktree, readPane))
     if (offer) offers.push(offer)
   }

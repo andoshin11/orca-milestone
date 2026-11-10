@@ -62,6 +62,16 @@ test('offersOf reads a question, a form and a permission for the agent waiting o
   assert.deepEqual(await offersOf([worktree([waiting({ toolName: 'Write' })])], { readCall }), [])
 })
 
+test('while several calls of one turn wait unwritten, a shell command comes from Orca and its menu', async () => {
+  const MENU_FOR = (command) => `Bash command\n ${command}\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and always allow\n   4. No\n Esc to cancel · Tab to amend`
+  const agent = waiting({ toolName: 'Bash', toolInput: 'touch allowed.txt' })
+  const [offer] = await offersOf([worktree([agent])], { readPane: async () => MENU_FOR('touch allowed.txt') })
+  assert.equal(offer.question, 'Bash を許可しますか？ touch allowed.txt')
+  assert.deepEqual(await offersOf([worktree([agent])], { readPane: async () => MENU_FOR('rm -rf x') }), [], 'another menu')
+  assert.deepEqual(await offersOf([worktree([agent])], { readPane: async () => 'no menu' }), [])
+  assert.deepEqual(await offersOf([worktree([waiting({ toolName: 'Write', toolInput: 'a.txt' })])], { readPane: async () => MENU_FOR('a.txt') }), [], 'only a shell command')
+})
+
 const CODEX_MENU = (command) => `Would you like to run the following command?\n  $ ${command}\n› 1. Yes, proceed (y)\n  2. Yes, and don't ask again (p)\n  3. No, and tell Codex what to do differently (esc)\n  Press enter to confirm or esc to cancel`
 
 test('a Codex permission comes from the menu on its screen, with stop instead of deny', async () => {
