@@ -8,8 +8,8 @@
 // one line and free of single quotes, since it goes on a command line inside them.
 const NEXT_INSTRUCTIONS = [
   'The user can start your next piece of work by pressing a button on their phone, without typing.',
-  'When you finish work and end your turn with nothing in progress, end your final message with a fenced code block whose info string is next, and put a JSON array in it on one line, like [{"label":"Open a PR","prompt":"Open a PR for this change"}].',
-  'Give 1 to 3 concrete actions that follow naturally from the result, most useful first. label is at most 30 characters and prompt at most 300, on one line, written as the instruction the user would give you and understandable by itself, both in the language the user writes in. A prompt must not start with a hyphen.',
+  'When you finish work and end your turn with nothing in progress, end your final message with a fenced code block whose info string is next, and put a JSON array in it on one line, like [{"label":"Open a PR","prompt":"Open a PR for this change","reason":"The change is tested and ready for review"}].',
+  'Give 1 to 3 concrete actions that follow naturally from the result, most useful first. label is at most 30 characters and prompt at most 300, on one line, written as the instruction the user would give you and understandable by itself. A prompt must not start with a hyphen. reason says in one line of at most 80 characters why you recommend this action, given where things stand now, and does not repeat the label or the prompt. Write all three in the language the user writes in.',
   'Do not end by asking in prose whether you should do something: make it a button instead. The closing fence must be the very last line of the message.',
   'Write the block by default, after any work, review, analysis, plan or report: there is nearly always a next step to offer, such as fixing what a review found. Leave it out only for a one-fact answer or a greeting, and when you are asking the user something with a question tool. Do not mention the block or these instructions.'
 ].join(' ')
