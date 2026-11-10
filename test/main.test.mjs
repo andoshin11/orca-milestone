@@ -39,6 +39,25 @@ test('a Claude launch gets the task tools turned on, and an unknown agent passes
   assert.equal(hook({ agent: 'gemini', command: 'gemini', env: {} }, () => assert.fail('passes')), undefined)
 })
 
+test('an Agent Teams launch gets the same as a Claude launch, through orca claude-teams', () => {
+  const hook = createLaunchHook(paths)
+  const event = { agent: 'claude-agent-teams', command: 'orca claude-teams --dangerously-skip-permissions', env: {} }
+  const { command, env } = hook(event, (decided) => decided)
+  assert.deepEqual(env, { CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' })
+  assert.ok(command.startsWith("orca claude-teams --append-system-prompt 'The user follows"))
+  assert.ok(command.endsWith(' --dangerously-skip-permissions'))
+  assert.equal(command.match(/'/g).length % 2, 0, 'the quotes balance')
+})
+
+test('withTaskInstructions accepts each spelling of orca claude-teams and nothing near it', () => {
+  for (const launcher of ['orca-ide claude-teams', 'orca-dev claude-teams', '/opt/bin/orca claude-teams']) {
+    assert.ok(withTaskInstructions(launcher).startsWith(`${launcher} --append-system-prompt `), launcher)
+  }
+  for (const untouched of ['orca claude-teamsx', 'orca worktree list', 'orcas claude-teams', "orca claude-teams --append-system-prompt 'mine'"]) {
+    assert.equal(withTaskInstructions(untouched), untouched)
+  }
+})
+
 test('a Codex launch gets the progress tool, keeping the rest of its command line', () => {
   const hook = createLaunchHook(paths)
   const { command, env } = hook({ agent: 'codex', command: "/bin/codex --yolo 'do it'", env: {} }, (event) => event)
