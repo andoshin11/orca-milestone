@@ -222,3 +222,30 @@ test('allowing a dangerous command takes a second press, which sends it confirme
   await settle()
   assert.deepEqual(requests, [{ offer: 'o1', index: 0, confirmed: true }])
 })
+
+test('a Claude agent Orca calls working but whose turn is over waits, with its proposals', async () => {
+  const { readWorkspaces } = await import('../src/orca-cli.mjs')
+  const { turnEnded } = await import('../src/claude-sessions.mjs')
+  const reply = 'できました\n```next\n[{"label":"A","prompt":"do a"}]\n```'
+  const busy = { agentType: 'claude', state: 'working', paneKey: 'tab:leaf', hasLivePty: true, stateStartedAt: 7, lastAssistantMessage: reply }
+  const worktrees = [
+    { path: '/a', displayName: 'a', isActive: true, agents: [busy] },
+    { path: '/b', displayName: 'b', agents: [{ ...busy, paneKey: 'tab:b' }] }
+  ]
+  const run = async () => ({ ok: true, result: { worktrees } })
+  const read = await readWorkspaces('orca', run, { readTurnEnded: async (path) => path === '/a' })
+  assert.deepEqual(read.active.agentStates, ['done'])
+  assert.equal(read.active.background, true)
+  assert.deepEqual(read.agents.map((agent) => [agent.path, agent.state, agent.background]), [['/a', 'done', true], ['/b', 'working', false]])
+  assert.deepEqual(read.offers.map((offer) => offer.path), ['/a'])
+  const failing = await readWorkspaces('orca', run, { readTurnEnded: async () => { throw new Error('no transcript') } })
+  assert.deepEqual(failing.agents.map((agent) => agent.state), ['working', 'working'])
+
+  const entry = (value) => JSON.stringify(value)
+  const ended = entry({ type: 'system', subtype: 'turn_duration' })
+  const said = entry({ type: 'assistant', message: { content: [{ type: 'text', text: 'done' }] } })
+  const prompt = entry({ type: 'user', message: { content: 'next' } })
+  assert.equal(turnEnded([said, ended, entry({ type: 'system', subtype: 'away_summary' }), entry({ type: 'pr-link' })].join('\n')), true)
+  assert.equal(turnEnded([said, ended, prompt].join('\n')), null)
+  assert.equal(turnEnded(said), null)
+})

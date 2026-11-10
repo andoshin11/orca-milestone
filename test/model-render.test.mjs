@@ -130,3 +130,15 @@ test('an expanded row shows every task, and only a long list lets the pointer in
   assert.ok(row(40).includes('t39.'))
   assert.ok(row(40).includes('has-detail long'))
 })
+
+test('an agent waiting while its shells run in the background says so, here and on its row', () => {
+  const tasks = [task(1, 'Run it', 'pending')]
+  const focused = buildModel({ ...workspace, agentStates: ['done'], background: true }, [{ listId: 'l', cwd: '/work/app', goal: 'g', tasks }])
+  assert.equal(focused.agent, 'background')
+  assert.ok(renderBody(focused).includes('<span class="agent background">待機中（裏で実行中）</span>'))
+  assert.equal(buildModel({ ...workspace, agentStates: ['done'] }, []).agent, 'idle')
+  const other = { workspace: 'juiz', repo: null, path: '/work/juiz', focused: false, state: 'done', background: true, since: 1 }
+  const model = buildModel(workspace, [{ listId: 'j', cwd: '/work/juiz', goal: 'g', tasks }], [other])
+  assert.equal(model.others.rows[0].background, true)
+  assert.ok(renderBody(model).includes('<span class="background">裏で実行中</span>'))
+})
