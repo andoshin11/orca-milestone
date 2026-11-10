@@ -17,6 +17,7 @@ import {
   readTranscriptHead,
   createPendingReader,
   pendingCall,
+  turnEnded,
   pendingQuestion
 } from './claude-sessions.mjs'
 import { readCodexProgress } from './codex-progress.mjs'
@@ -63,6 +64,8 @@ export function createMilestoneWorker({
   const readers = {
     readQuestion: createPendingReader(home, pendingQuestion),
     readCall: createPendingReader(home, pendingCall),
+    // Orca calls an agent working while its background shells run, even after its turn.
+    readTurnEnded: createPendingReader(home, turnEnded),
     readPane: (paneKey) => readPaneScreen(runArgs, paneKey)
   }
   let lastHtml = null

@@ -25,12 +25,13 @@ const NEEDS_USER = new Set(['waiting', 'blocked', 'permission'])
 function buildOthers(agents, sessions) {
   const byWorkspace = new Map()
   for (const agent of agents) {
-    const entry = byWorkspace.get(agent.path) ?? { ...agent, needsUser: false, working: false, since: 0 }
+    const entry = byWorkspace.get(agent.path) ?? { ...agent, needsUser: false, working: false, background: false, since: 0 }
     if (NEEDS_USER.has(agent.state)) {
       entry.needsUser = true
       entry.since = Math.max(entry.since, agent.since ?? 0)
     }
     if (agent.state === 'working') entry.working = true
+    if (agent.background) entry.background = true
     byWorkspace.set(agent.path, entry)
   }
   const rows = [...byWorkspace.values()].map((entry) => {
@@ -43,6 +44,7 @@ function buildOthers(agents, sessions) {
       focused: entry.focused,
       kind: entry.needsUser ? 'attention' : 'idle',
       working: entry.working && !entry.needsUser,
+      background: entry.background && !entry.working && !entry.needsUser,
       since: entry.since,
       updatedAt: session?.updatedAt ?? 0,
       goal: session?.goal ?? null,
@@ -71,9 +73,9 @@ function buildOthers(agents, sessions) {
 }
 
 /**
- * @param workspace { path, displayName, agentStates } of the focused workspace, or null
+ * @param workspace { path, displayName, agentStates, background } of the focused workspace, or null
  * @param sessions  [{ listId, cwd, goal, tasks, updatedAt }] of every workspace, newest first
- * @param agents    [{ workspace, repo, path, focused, state, since }] Orca runs, one per Claude or Codex agent
+ * @param agents    [{ workspace, repo, path, focused, state, background, since }] Orca runs, one per Claude or Codex agent
  * @param offers    [{ kind, id, path, ... }] what agents offer to choose from, see next-actions.mjs
  */
 export function buildModel(workspace, sessions, agents = [], offers = []) {
@@ -93,7 +95,7 @@ export function buildModel(workspace, sessions, agents = [], offers = []) {
       : states.includes('blocked') || states.includes('waiting')
         ? 'waiting'
         : states.length > 0
-          ? 'idle'
+          ? workspace.background ? 'background' : 'idle'
           : 'none',
     sessions: mine,
     next: offers.find((offer) => offer.path === workspace.path) ?? null,

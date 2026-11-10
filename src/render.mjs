@@ -25,6 +25,8 @@ const AGENT_LABELS = {
   working: '作業中',
   waiting: '入力待ち',
   idle: '待機中',
+  // Waiting for the user while shells it started in the background run.
+  background: '待機中（裏で実行中）',
   none: ''
 }
 
@@ -103,7 +105,9 @@ function renderRow(row) {
     ? '<span class="badge">要確認</span>'
     : row.working
       ? `<span class="working">${AGENT_LABELS.working}</span>`
-      : ''
+      : row.background
+        ? '<span class="background">裏で実行中</span>'
+        : ''
   const of = row.total > 0 ? `<span class="of">${row.done} / ${row.total}</span>` : ''
   const bar = row.total > 0 ? `<div class="bar"><div style="width:${percent}%"></div></div>` : ''
   const repo = row.repo ? `<span class="repo">${escape(row.repo)}</span>` : ''

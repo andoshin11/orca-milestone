@@ -36,25 +36,47 @@ function mainAgents(worktree) {
 }
 
 /**
- * The focused workspace ({ path, displayName, agentStates }, or null), the main agents of every
+ * The workspaces with each Claude agent that Orca calls working but whose turn is over marked as
+ * done, and `background`: shells it started go on running, and it waits for the user. Its proposals
+ * then show as for any agent that finished.
+ * @param readTurnEnded resolves a workspace path to whether its Claude session ended its turn
+ */
+export async function settleAgents(worktrees, readTurnEnded) {
+  const settled = []
+  for (const worktree of worktrees) {
+    const working = mainAgents(worktree).filter((agent) => agent.agentType === 'claude' && agent.state === 'working' && agent.hasLivePty === true)
+    if (working.length !== 1 || !(await readTurnEnded(worktree.path).catch(() => null))) {
+      settled.push(worktree)
+      continue
+    }
+    settled.push({ ...worktree, agents: worktree.agents.map((agent) => (agent === working[0] ? { ...agent, state: 'done', background: true } : agent)) })
+  }
+  return settled
+}
+
+/**
+ * The focused workspace ({ path, displayName, agentStates, background }, or null), the main agents of every
  * workspace that is not archived, and what each agent offers to choose from: its proposed next
  * steps, its question or the tool waiting for permission. Of the prompts and replies, only the
  * block an agent wrote for those buttons is kept.
- * @param readers how to read a pending question or call and a pane's screen, see offersOf
+ * @param readers how to read a pending question or call and a pane's screen, see offersOf, and
+ *   `readTurnEnded`, see settleAgents
  */
 export async function readWorkspaces(cli, run = runOrca, readers = {}) {
   const response = await run(cli, ['worktree', 'ps', '--limit', '1000', '--json'])
   if (!response?.ok) {
     throw new Error(response?.error?.message ?? 'orca worktree ps failed')
   }
-  const worktrees = response.result.worktrees.filter((worktree) => !worktree.isArchived)
+  const { readTurnEnded = async () => null, ...offerReaders } = readers
+  const worktrees = await settleAgents(response.result.worktrees.filter((worktree) => !worktree.isArchived), readTurnEnded)
   const active = worktrees.find((worktree) => worktree.isActive)
   return {
     active: active
       ? {
           path: active.path,
           displayName: active.displayName,
-          agentStates: mainAgents(active).map((agent) => agent.state)
+          agentStates: mainAgents(active).map((agent) => agent.state),
+          background: mainAgents(active).some((agent) => agent.background === true)
         }
       : null,
     agents: worktrees.flatMap((worktree) =>
@@ -64,9 +86,10 @@ export async function readWorkspaces(cli, run = runOrca, readers = {}) {
         path: worktree.path,
         focused: Boolean(worktree.isActive),
         state: agent.state,
+        background: agent.background === true,
         since: agent.stateStartedAt ?? null
       }))
     ),
-    offers: await offersOf(worktrees, readers)
+    offers: await offersOf(worktrees, offerReaders)
   }
 }
