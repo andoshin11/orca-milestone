@@ -249,3 +249,20 @@ test('a Claude agent Orca calls working but whose turn is over waits, with its p
   assert.equal(turnEnded([said, ended, prompt].join('\n')), null)
   assert.equal(turnEnded(said), null)
 })
+
+test('each turn of an agent with shells in the background gets cards of its own', async () => {
+  const { readWorkspaces } = await import('../src/orca-cli.mjs')
+  const { turnEnded } = await import('../src/claude-sessions.mjs')
+  const reply = 'できました\n```next\n[{"label":"A","prompt":"do a"}]\n```'
+  const busy = { agentType: 'claude', state: 'working', paneKey: 'tab:leaf', hasLivePty: true, stateStartedAt: 7, lastAssistantMessage: reply }
+  const run = async () => ({ ok: true, result: { worktrees: [{ path: '/a', displayName: 'a', agents: [busy] }] } })
+  const turn = async (at) => (await readWorkspaces('orca', run, { readTurnEnded: async () => at }))
+  const first = await turn(1_000)
+  const second = await turn(2_000)
+  assert.notEqual(first.offers[0].id, second.offers[0].id, 'a card pressed in one turn leaves the next one usable')
+  assert.equal((await turn(1_000)).offers[0].id, first.offers[0].id, 'the same turn keeps its cards')
+  assert.ok((await turn(true)).offers[0].id, 'without the time, cards still show')
+
+  const ended = JSON.stringify({ type: 'system', subtype: 'turn_duration', timestamp: '2026-11-12T06:03:28.391Z' })
+  assert.equal(turnEnded(ended), Date.parse('2026-11-12T06:03:28.391Z'))
+})
