@@ -190,6 +190,7 @@ README のスクリーンショットは、ダミーデータでパネルを描�
 ```sh
 node scripts/render-sample.mjs /tmp/sample.html          # 通常の表示
 node scripts/render-sample.mjs /tmp/sample-hover.html --hover   # 行にマウスを乗せたとき
+node scripts/render-sample.mjs /tmp/sample-next.html --next     # 作業を終え、次の作業のカードが出たとき（docs/images/panel-next.png）
 ```
 
 ワーカーのコードを変えたら、Settings → Plugins で Milestone をいったんオフにしてからオンに戻すと、新しいコードで起動します。CI では `engines.orca` に対応する Orca のタグ（v1.4.247）を取得して、manifest を検証します。

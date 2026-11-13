@@ -1,8 +1,9 @@
 // Renders the panel with made-up workspaces and tasks, for the screenshots in the README.
 //
-//   node scripts/render-sample.mjs <out.html> [--hover]
+//   node scripts/render-sample.mjs <out.html> [--hover | --next]
 //
 // The page wraps the panel in a sandboxed frame, with the design tokens of Orca's dark theme. --hover expands one other workspace, as a hover would.
+// --next shows the focused workspace after its agent finished, with the next steps it offers as cards.
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { buildModel } from '../src/model.mjs'
@@ -10,9 +11,10 @@ import { renderBody } from '../src/render.mjs'
 
 const [out, flag] = process.argv.slice(2)
 if (!out) {
-  console.error('usage: node scripts/render-sample.mjs <out.html> [--hover]')
+  console.error('usage: node scripts/render-sample.mjs <out.html> [--hover | --next]')
   process.exit(1)
 }
+const next = flag === '--next'
 
 const ORCA_DARK_TOKENS =
   '--orca-background:#0a0a0a;--orca-foreground:#fafafa;--orca-card:#171717;' +
@@ -36,10 +38,10 @@ const sessions = [
   list('focused', 'search-filters', '商品一覧に価格と在庫の絞り込みを追加する', [
     ['今の検索 API を調べる', 'completed'],
     ['絞り込みの条件をクエリに足す', 'completed'],
-    ['フィルターの UI を作る', 'in_progress'],
-    ['テストを書く', 'pending'],
-    ['PR を作る', 'pending'],
-    ['CI の成功を確かめる', 'pending']
+    ['フィルターの UI を作る', next ? 'completed' : 'in_progress'],
+    ['テストを書く', next ? 'completed' : 'pending'],
+    ['PR を作る', next ? 'completed' : 'pending'],
+    ['CI の成功を確かめる', next ? 'completed' : 'pending']
   ], 9),
   list('a', 'login-redirect', 'ログイン後に元のページへ戻す', [
     ['リダイレクト先の保存方法を決める', 'completed'],
@@ -75,16 +77,32 @@ const agent = (workspace, repo, state, since) => ({
   since
 })
 
+// The cards the agent offers once it has finished, read from the next block of its last answer.
+const offers = next
+  ? [{
+      kind: 'next',
+      id: 'sample',
+      path: '/work/search-filters',
+      suggestions: [
+        { label: 'E2E テストを足す', prompt: '価格と在庫の絞り込みについて、条件の組み合わせごとに一覧が変わることを確かめる E2E テストを足して、PR に push してください', reason: '単体テストだけで、画面での組み合わせを確かめていないため' },
+        { label: 'ステージングで確かめる', prompt: 'PR をステージングに出し、在庫 0 の商品が絞り込みで消えることをブラウザで確かめてください', reason: 'CI は通ったが実データで見ていないため' },
+        { label: 'README に使い方を書く', prompt: '絞り込みのクエリパラメータを README の API の節に追記してください', reason: '新しいパラメータがドキュメントにないため' }
+      ]
+    }]
+  : []
+const focusedState = next ? 'done' : 'working'
+
 const model = buildModel(
-  { path: '/work/search-filters', displayName: 'search-filters', agentStates: ['working'] },
+  { path: '/work/search-filters', displayName: 'search-filters', agentStates: [focusedState] },
   sessions,
   [
-    agent('search-filters', 'web-app', 'working', 9),
+    agent('search-filters', 'web-app', focusedState, 9),
     agent('login-redirect', 'auth-service', 'waiting', 4),
     agent('upgrade-node', 'web-app', 'working', 7),
     agent('csv-export', 'admin-console', 'done', 6),
     agent('flaky-tests', 'api-server', 'done', 5)
-  ]
+  ],
+  offers
 )
 
 // Which row to open for --hover: the second one, a workspace with unfinished tasks.
@@ -101,6 +119,6 @@ const srcdoc = panel.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
 await writeFile(
   out,
   '<!doctype html><html><body style="margin:0;background:#0a0a0a">' +
-    `<iframe sandbox="allow-scripts" style="display:block;width:300px;height:640px;border:0" srcdoc="${srcdoc}"></iframe>` +
+    `<iframe sandbox="allow-scripts" style="display:block;width:300px;height:${next ? 900 : 640}px;border:0" srcdoc="${srcdoc}"></iframe>` +
     '</body></html>\n'
 )
