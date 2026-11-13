@@ -266,3 +266,27 @@ test('each turn of an agent with shells in the background gets cards of its own'
   const ended = JSON.stringify({ type: 'system', subtype: 'turn_duration', timestamp: '2026-11-12T06:03:28.391Z' })
   assert.equal(turnEnded(ended), Date.parse('2026-11-12T06:03:28.391Z'))
 })
+
+test('a turn stays over after compacting while idle, and Orca saying the agent is done is enough', async () => {
+  const { readWorkspaces } = await import('../src/orca-cli.mjs')
+  const { turnEnded } = await import('../src/claude-sessions.mjs')
+  const entry = (value) => JSON.stringify(value)
+  const ended = entry({ type: 'system', subtype: 'turn_duration', timestamp: '2026-11-13T06:40:43.000Z' })
+  const compacted = [
+    entry({ type: 'system', subtype: 'compact_boundary' }),
+    entry({ type: 'user', isCompactSummary: true, message: { role: 'user', content: 'This session is being continued...' } }),
+    entry({ type: 'attachment', attachment: { type: 'file' } }),
+    entry({ type: 'system', subtype: 'informational' })
+  ]
+  assert.equal(turnEnded([ended, ...compacted].join('\n')), Date.parse('2026-11-13T06:40:43.000Z'))
+  assert.equal(turnEnded([ended, ...compacted, entry({ type: 'user', message: { role: 'user', content: 'next' } })].join('\n')), null)
+
+  const reply = 'できました\n```next\n[{"label":"A","prompt":"do a"}]\n```'
+  const busy = { agentType: 'claude', state: 'working', paneKey: 'tab:leaf', hasLivePty: true, stateStartedAt: 7, lastAssistantMessage: reply, mainAgent: { state: 'done', stateStartedAt: 3_000 } }
+  const run = async () => ({ ok: true, result: { worktrees: [{ path: '/a', displayName: 'a', agents: [busy] }] } })
+  const read = await readWorkspaces('orca', run, { readTurnEnded: async () => { throw new Error('not read') } })
+  assert.deepEqual(read.agents.map((agent) => [agent.state, agent.background, agent.since]), [['done', true, 3_000]])
+  assert.equal(read.offers.length, 1)
+  const still = await readWorkspaces('orca', async () => ({ ok: true, result: { worktrees: [{ path: '/a', displayName: 'a', agents: [{ ...busy, mainAgent: { state: 'working', stateStartedAt: 3_000 } }] }] } }))
+  assert.deepEqual(still.agents.map((agent) => agent.state), ['working'], 'the agent itself still working stays working')
+})
