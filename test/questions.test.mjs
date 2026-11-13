@@ -290,3 +290,26 @@ test('a turn stays over after compacting while idle, and Orca saying the agent i
   const still = await readWorkspaces('orca', async () => ({ ok: true, result: { worktrees: [{ path: '/a', displayName: 'a', agents: [{ ...busy, mainAgent: { state: 'working', stateStartedAt: 3_000 } }] }] } }))
   assert.deepEqual(still.agents.map((agent) => agent.state), ['working'], 'the agent itself still working stays working')
 })
+
+test('in an agent team, the lead stands for the workspace and its teammates go under it', async () => {
+  const { readWorkspaces, joinTeams, mayHoldTeam } = await import('../src/orca-cli.mjs')
+  const reply = 'できました\n```next\n[{"label":"A","prompt":"do a"}]\n```'
+  const claude = (leaf, extra = {}) => ({ agentType: 'claude', state: 'done', paneKey: `tab:${leaf}`, hasLivePty: true, stateStartedAt: 7, lastAssistantMessage: '届いた通知は新しい依頼ではありません', ...extra })
+  const lead = claude('lead', { lastAssistantMessage: reply })
+  const worktree = { path: '/a', displayName: 'a', isActive: true, agents: [claude('mate1'), lead, claude('mate2', { state: 'working' })] }
+  const terminals = [
+    { tabId: 'tab', leafId: 'lead', agentIdentity: 'claude-agent-teams' },
+    { tabId: 'tab', leafId: 'mate1', agentIdentity: null },
+    { tabId: 'tab', leafId: 'mate2', agentIdentity: null }
+  ]
+  const run = async (cli, args) => ({ ok: true, result: args[0] === 'terminal' ? { terminals } : { worktrees: [worktree] } })
+  const read = await readWorkspaces('orca', run)
+  assert.deepEqual(read.active.agentStates, ['done'], 'a teammate at work does not make the lead busy')
+  assert.equal(read.agents.length, 1)
+  assert.deepEqual(read.offers.map((offer) => [offer.paneKey, offer.suggestions[0].label]), [['tab:lead', 'A']])
+
+  assert.equal(mayHoldTeam([{ agents: [claude('x'), { ...claude('y'), paneKey: 'other:y' }] }]), false, 'agents in other tabs are not a team')
+  assert.equal(joinTeams([worktree], []) [0], worktree, 'without a lead nothing changes')
+  const other = { ...worktree, agents: [claude('mate1'), { ...lead, paneKey: 'other:lead' }] }
+  assert.equal(joinTeams([other], [{ tabId: 'other', leafId: 'lead', agentIdentity: 'claude-agent-teams' }])[0], other, 'a Claude in another tab is no teammate')
+})

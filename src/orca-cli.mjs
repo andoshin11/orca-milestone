@@ -36,6 +36,38 @@ function mainAgents(worktree) {
 }
 
 /**
+ * Whether a workspace may hold a Claude agent team: several Claude agents in one tab. The teammates
+ * of Agent Teams run in panes beside their lead, and Orca lists each as an agent of its own.
+ */
+export function mayHoldTeam(worktrees) {
+  return worktrees.some((worktree) => {
+    const tabs = mainAgents(worktree).filter((agent) => agent.agentType === 'claude').map((agent) => agent.paneKey?.split(':')[0])
+    return new Set(tabs).size < tabs.length
+  })
+}
+
+/**
+ * The workspaces with each teammate under its lead, as `parentPaneKey`, so that the lead alone
+ * stands for the team: its cards, its state. Orca marks the terminal of a lead with the agent
+ * identity `claude-agent-teams`; the other Claude agents in its tab are its teammates.
+ * @param terminals the terminals of `orca terminal list`
+ */
+export function joinTeams(worktrees, terminals) {
+  const leads = new Set(
+    (terminals ?? []).filter((terminal) => terminal.agentIdentity === 'claude-agent-teams' && terminal.tabId && terminal.leafId).map((terminal) => `${terminal.tabId}:${terminal.leafId}`)
+  )
+  if (leads.size === 0) return worktrees
+  return worktrees.map((worktree) => {
+    const lead = mainAgents(worktree).find((agent) => leads.has(agent.paneKey))
+    if (!lead) return worktree
+    const tab = lead.paneKey.split(':')[0]
+    const isTeammate = (agent) => agent !== lead && !agent.parentPaneKey && agent.agentType === 'claude' && agent.paneKey?.split(':')[0] === tab
+    if (!worktree.agents.some(isTeammate)) return worktree
+    return { ...worktree, agents: worktree.agents.map((agent) => (isTeammate(agent) ? { ...agent, parentPaneKey: lead.paneKey } : agent)) }
+  })
+}
+
+/**
  * When the agent itself finished its turn, as Orca reports it apart from the shells it left running
  * (`mainAgent`, seen in Orca 1.4.257), or null when Orca does not say.
  */
@@ -71,16 +103,18 @@ export async function settleAgents(worktrees, readTurnEnded) {
  * workspace that is not archived, and what each agent offers to choose from: its proposed next
  * steps, its question or the tool waiting for permission. Of the prompts and replies, only the
  * block an agent wrote for those buttons is kept.
- * @param readers how to read a pending question or call and a pane's screen, see offersOf, and
- *   `readTurnEnded`, see settleAgents
+ * @param readers how to read a pending question or call and a pane's screen, see offersOf,
+ *   `readTurnEnded`, see settleAgents, and `readTerminals`, see joinTeams
  */
 export async function readWorkspaces(cli, run = runOrca, readers = {}) {
   const response = await run(cli, ['worktree', 'ps', '--limit', '1000', '--json'])
   if (!response?.ok) {
     throw new Error(response?.error?.message ?? 'orca worktree ps failed')
   }
-  const { readTurnEnded = async () => null, ...offerReaders } = readers
-  const worktrees = await settleAgents(response.result.worktrees.filter((worktree) => !worktree.isArchived), readTurnEnded)
+  const { readTurnEnded = async () => null, readTerminals = async () => (await run(cli, ['terminal', 'list', '--json']))?.result?.terminals ?? [], ...offerReaders } = readers
+  let listed = response.result.worktrees.filter((worktree) => !worktree.isArchived)
+  if (mayHoldTeam(listed)) listed = joinTeams(listed, await readTerminals().catch(() => []))
+  const worktrees = await settleAgents(listed, readTurnEnded)
   const active = worktrees.find((worktree) => worktree.isActive)
   return {
     active: active
