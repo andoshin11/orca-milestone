@@ -17,7 +17,26 @@
     "panels": [{ "id": "milestones", "title": "Milestones", "icon": "flag", "entry": "panel/index.html" }],
     "commands": [{ "id": "milestone.refresh", "title": "Milestone: Refresh" }],
     "events": [{ "on": "agent.status.changed" }, { "on": "workspace.changed" }],
-    "hooks": [{ "event": "agent.launch.before" }]
+    "hooks": [{ "event": "agent.launch.before" }],
+    "settings": [
+      {
+        "key": "remoteUrl",
+        "title": "Remote agent-status-panel",
+        "description": "Host name or https URL of the agent-status-panel daemon on another Mac, served by tailscale serve, such as mac-mini.example.ts.net. Its sessions show below the other workspaces, and their buttons press there. Leave empty to show only this Mac.",
+        "type": "string",
+        "default": "",
+        "maxLength": 512,
+        "placeholder": "mac-mini.example.ts.net"
+      },
+      {
+        "key": "remoteLabel",
+        "title": "Remote name",
+        "description": "Heading of the remote sessions in the panel.",
+        "type": "string",
+        "default": "Mac mini",
+        "maxLength": 64
+      }
+    ]
   },
-  "capabilities": [{ "kind": "workspace:read" }, { "kind": "agent:read" }, { "kind": "workspace:write" }]
+  "capabilities": [{ "kind": "workspace:read" }, { "kind": "agent:read" }, { "kind": "workspace:write" }, { "kind": "settings:own" }]
 }

@@ -1,17 +1,19 @@
 // Renders the panel with made-up workspaces and tasks, for the screenshots in the README.
 //
-//   node scripts/render-sample.mjs <out.html> [--hover | --next]
+//   node scripts/render-sample.mjs <out.html> [--hover | --next | --remote [status.json]]
 //
 // The page wraps the panel in a sandboxed frame, with the design tokens of Orca's dark theme. --hover expands one other workspace, as a hover would.
 // --next shows the focused workspace after its agent finished, with the next steps it offers as cards.
+// --remote adds the sessions of another Mac below the others, made up or read from a saved status.json.
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { buildModel } from '../src/model.mjs'
+import { readSnapshot } from '../src/remote.mjs'
 import { renderBody } from '../src/render.mjs'
 
-const [out, flag] = process.argv.slice(2)
+const [out, flag, remoteFile] = process.argv.slice(2)
 if (!out) {
-  console.error('usage: node scripts/render-sample.mjs <out.html> [--hover | --next]')
+  console.error('usage: node scripts/render-sample.mjs <out.html> [--hover | --next | --remote [status.json]]')
   process.exit(1)
 }
 const next = flag === '--next'
@@ -105,6 +107,26 @@ const model = buildModel(
   offers
 )
 
+const json = (value) => JSON.stringify(value)
+const SAMPLE_REMOTE = {
+  v: '1',
+  at: '0',
+  sessions: [
+    { id: 'r1', agent: 'claude', state: 'active', live: '1', attention: 'permission', workspace: 'rate-limit', goal: 'API にレート制限を入れる',
+      tasks: json([['c', '今のトラフィックを調べる'], ['i', '負荷試験を流しています'], ['p', 'PR を作る']]), done: '1', total: '3',
+      offer: 'o-r1', suggestions: json(['許可', '拒否']), details: json(['', '']), question: '［実行する］Bash を許可しますか？ npm run load-test' },
+    { id: 'r2', agent: 'claude', state: 'finished', live: '1', attention: '', workspace: 'invoice-pdf', goal: '請求書を PDF で送れるようにする',
+      tasks: json([['c', 'テンプレートを作る'], ['c', 'PDF 生成を組み込む'], ['c', 'PR を作る']]), done: '3', total: '3',
+      offer: 'o-r2', suggestions: json(['PR をマージする']), details: json(['PR #212 をマージし、デプロイが成功するまで確かめてください']), reasons: json(['CI が成功しレビューも済んだため']) },
+    { id: 'r3', agent: 'codex', state: 'active', live: '1', attention: '', workspace: 'dark-mode', goal: 'ダークモードの配色を整える',
+      tasks: json([['c', '色のトークンを洗い出す'], ['i', 'コンポーネントに当てています'], ['p', 'スクリーンショットで確かめる']]), done: '1', total: '3' }
+  ]
+}
+if (flag === '--remote') {
+  const body = remoteFile ? JSON.parse(await readFile(remoteFile, 'utf8')) : SAMPLE_REMOTE
+  model.remote = { label: 'Mac mini', ...readSnapshot(body) }
+}
+
 // Which row to open for --hover: the second one, a workspace with unfinished tasks.
 const hover = flag === '--hover'
   ? '<style>.row.has-detail:nth-child(2) .detail{grid-template-rows:1fr;visibility:visible}' +
@@ -119,6 +141,6 @@ const srcdoc = panel.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
 await writeFile(
   out,
   '<!doctype html><html><body style="margin:0;background:#0a0a0a">' +
-    `<iframe sandbox="allow-scripts" style="display:block;width:300px;height:${next ? 900 : 640}px;border:0" srcdoc="${srcdoc}"></iframe>` +
+    `<iframe sandbox="allow-scripts" style="display:block;width:300px;height:${next || flag === '--remote' ? 900 : 640}px;border:0" srcdoc="${srcdoc}"></iframe>` +
     '</body></html>\n'
 )

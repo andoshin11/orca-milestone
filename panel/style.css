@@ -128,3 +128,13 @@ code { font-size: 12px; }
 @media (prefers-reduced-motion: reduce) {
   .action { transition: none; }
 }
+
+/* The sessions of another Mac, read from its agent-status-panel daemon. They can be many, so they
+   scroll on their own below the other workspaces. */
+.remote { flex: 0 1 auto; min-height: 0; max-height: 50vh; overflow: auto; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--orca-border); }
+.remote h2 { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 6px;
+  font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
+.remote h2 .attention { color: var(--ms-todo); }
+.remote .row .head { cursor: default; }
+.remote .remote-next { list-style: none; margin: 4px 0 8px 14px; }
+.next .summary { margin: 0 0 8px; color: var(--orca-muted-foreground); }
