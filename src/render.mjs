@@ -93,7 +93,9 @@ function renderNext(offer) {
     const cards = offer.suggestions.map((s, index) =>
       card(offer.id, index, s.label, s.action === 'restart' ? [['detail', s.detail]] : [['reason', s.reason], ['prompt', clip(s.prompt, PROMPT_LINES_MAX)]])
     )
-    body = `<ol class="actions">${cards.join('')}</ol>`
+    // Another Mac's daemon sends what the agent said at the end of its turn with the proposal.
+    const summary = offer.summary ? `<p class="summary">${escape(clip(offer.summary, GOAL_MAX))}</p>` : ''
+    body = `${summary}<ol class="actions">${cards.join('')}</ol>`
   }
   // What the rest of this turn allowed without a card, to be read afterwards.
   if (offer.allowed?.length > 0) {
@@ -126,7 +128,10 @@ function renderRow(row) {
       : '<span class="dot"></span>'
   const head = `<div class="top">${mark}<span class="name">${escape(row.workspace)}${repo}</span>${badge}${of}</div>${bar}`
   const key = escape(`${row.workspace}\n${row.repo ?? ''}\n${clip(row.goal ?? '', GOAL_MAX)}`)
-  const button = `<div class="head" role="button" tabindex="0" data-open="${escape(row.path)}">${head}</div>`
+  // A session of another Mac has no path here to open; hovering still shows its tasks.
+  const button = row.path === null
+    ? `<div class="head" tabindex="0">${head}</div>`
+    : `<div class="head" role="button" tabindex="0" data-open="${escape(row.path)}">${head}</div>`
   if (row.total === 0) return `<li class="row ${row.kind}" data-key="${key}">${button}</li>`
   // Hovering a row's head expands its goal and tasks; plain CSS, so it needs no script.
   const goal = row.goal ? `<p class="goal">${escape(clip(row.goal, GOAL_MAX))}</p>` : ''
@@ -142,9 +147,52 @@ function renderOthers(others) {
 <ol class="rows">${others.rows.map(renderRow).join('')}</ol></div>`
 }
 
+const REMOTE_ERRORS = {
+  unreachable: 'つながりません。Tailscale と接続先の設定を確かめてください。',
+  loading: '読み込み中です。',
+  unreadable: '読めない形式です。agent-status-panel の版を確かめてください。'
+}
+
+/** A session of another Mac: a row like the other workspaces, with its cards always shown under it. */
+function renderRemoteSession(session) {
+  const row = renderRow({
+    workspace: session.workspace || session.agent,
+    repo: null,
+    path: null,
+    kind: session.attention ? 'attention' : 'idle',
+    working: false,
+    background: false,
+    goal: session.goal,
+    done: session.done,
+    total: session.total,
+    tasks: session.tasks
+  })
+  // In an item of its own: a row stacks its expansion above its head.
+  return session.offer ? `${row}<li class="remote-next">${renderNext(session.offer)}</li>` : row
+}
+
+/**
+ * The sessions of the Mac whose daemon the settings name. Its buttons press there, so they need
+ * the person's own Tailscale login, as on the iPhone.
+ */
+function renderRemote(remote) {
+  if (!remote) return ''
+  const attention = remote.sessions?.filter((session) => session.attention).length ?? 0
+  const badge = attention > 0 ? `<span class="attention">要確認 ${attention}</span>` : ''
+  const heading = `<h2><span>${escape(remote.label)}</span>${badge}</h2>`
+  if (remote.error) {
+    const text = REMOTE_ERRORS[remote.error] ?? `読めませんでした（${remote.error}）。`
+    return `<div class="remote">${heading}<p class="empty">${escape(text)}</p></div>`
+  }
+  if (remote.sessions.length === 0) {
+    return `<div class="remote">${heading}<p class="empty">実行中のセッションはありません。</p></div>`
+  }
+  return `<div class="remote">${heading}<ol class="rows">${remote.sessions.map(renderRemoteSession).join('')}</ol></div>`
+}
+
 export function renderBody(model) {
   // The focused workspace sits at the top and the others at the bottom edge, apart.
-  return `<main>${renderFocused(model)}</main>${renderOthers(model.others)}`
+  return `<main>${renderFocused(model)}</main>${renderOthers(model.others)}${renderRemote(model.remote)}`
 }
 
 function renderFocused(model) {

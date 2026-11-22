@@ -20,6 +20,7 @@
 - **移動する:** 行を押すと、そのワークスペースへ移動します。
 - **次の作業を頼む:** フォーカス中のワークスペースのエージェントが回答の最後に書いた次の候補を、カードとして縦に並べます。押すと、その依頼文をエージェントに送ります。
 - **質問と許可に答える:** Claude Code の質問（AskUserQuestion）にカードで答えられます。複数の質問や複数選択は、選んでから「回答を送信」を押します。ツールの許可待ちは「許可」（今回だけ）と「拒否」のカードで答えられます（Codex は「拒否」の代わりに「中止」）。
+- **別の Mac のセッションを見る:** エージェントを別の Mac で動かし、この Mac の Orca をクライアントとして使う場合に、その Mac の [agent-status-panel](https://github.com/andoshin11/agent-status-panel) の daemon からセッションを読み、パネルの一番下に並べます。カードを押すと、その Mac のエージェントに送ります。[別の Mac のセッションを出す](#別の-mac-のセッションを出す)を参照してください。
 
 Claude Code と Codex に対応しています。
 
@@ -75,6 +76,7 @@ Node のワーカーを動かすので、フルアクセスの plugin として�
 | 権限 `agent:read` | Agent ステータスの通知 | 表示の更新 |
 | 権限 `workspace:write` | ワークスペースを開く、組み込みコマンドを実行する | 行を押したときの移動（これにしか使いません） |
 | フック `agent.launch.before` | エージェントの起動直前の処理 | [起動時の設定](#必要なもの) |
+| 権限 `settings:own` | この plugin の設定の読み取り | [別の Mac の接続先](#別の-mac-のセッションを出す) |
 
 カードを押したときは、Orca に同梱の CLI（`orca terminal send`）で、そのエージェントのターミナルに依頼文やキーを送ります。権限の対象ではなく、ワーカーが CLI を実行して行います。
 
@@ -91,11 +93,30 @@ Node のワーカーを動かすので、フルアクセスの plugin として�
 
 プラグインの一覧で Milestone を開き、右上の **⋯** から **削除…** を選びます。Codex の進捗ファイルを置く `~/.orca-milestone/` は残るので、不要なら削除してください。
 
+## 別の Mac のセッションを出す
+
+エージェントを常に動かしている Mac（例: Mac mini）と、普段使う Mac（例: MacBook Pro）が別のときに使います。設定するのは、普段使う Mac の Orca だけです。
+
+1. エージェントを動かす Mac で [agent-status-panel](https://github.com/andoshin11/agent-status-panel) の daemon を動かし、`tailscale serve` で tailnet に公開します（iPhone アプリと同じ準備です。Funnel は使いません）。ボタンを押すには、daemon の `allowedLogin` に自分の Tailscale のログインを設定します。
+2. 普段使う Mac の Orca で、**Settings → Plugins → Milestone** を開き、次を入れます。
+   - **Remote agent-status-panel**: daemon の tailnet のホスト名（`mac-mini.example.ts.net` など）か、`https://` の URL
+   - **Remote name**: パネルの見出し（既定は `Mac mini`）
+
+パネルの一番下に、その Mac のセッションが、入力や許可を待っているものから順に並びます。10 秒ごとに読み直します。
+
+- 質問・許可・次の作業のカードは、セッションの下に常に出ます。押すと daemon の `POST /next` に送り、daemon がその Mac のエージェントに伝えます。
+- daemon は、`tailscale serve` が付けるログイン名で押した人を確かめます。普段使う Mac も同じ Tailscale のログインでつないでください。
+- 出るのは daemon の `status.json` にある情報だけです。ワークスペースへの移動と「最新の指示で再開」のカードはありません。
+- ホスト名は Orca の設定にだけ保存されます。
+
+![別の Mac のセッション](docs/images/panel-remote.png)
+
 ## 表示されないとき
 
 - パネルに「このワークスペースのエージェントはまだタスクを作っていません」と出る場合、エージェントがタスクを記録していません。記録するかどうかはエージェントが作業の大きさで決めるため、短い作業では記録しないこともあります。進捗を出したいときは「タスクに分けて進めて」と頼みます。
 - plugin を入れる前や更新の前から動いているセッションは、起動時の処理が効いていません。新しく起動し直してください。
 - Codex の場合は、`~/.orca-milestone/progress/` に進捗ファイルができているかを確かめます。ファイルがなければ、Codex に `update_progress` ツールがあるか尋ねてください。
+- 別の Mac のセッションに「つながりません」と出る場合は、両方の Mac が Tailscale につながっているか、設定のホスト名が合っているかを確かめます。Mac を再起動したあとは、Tailscale をオフにしてオンに戻すと直ることがあります。
 
 ### 知っておきたい制約
 
@@ -191,6 +212,7 @@ README のスクリーンショットは、ダミーデータでパネルを描�
 node scripts/render-sample.mjs /tmp/sample.html          # 通常の表示
 node scripts/render-sample.mjs /tmp/sample-hover.html --hover   # 行にマウスを乗せたとき
 node scripts/render-sample.mjs /tmp/sample-next.html --next     # 作業を終え、次の作業のカードが出たとき（docs/images/panel-next.png）
+node scripts/render-sample.mjs /tmp/sample-remote.html --remote # 別の Mac のセッションを足したとき（docs/images/panel-remote.png）
 ```
 
 ワーカーのコードを変えたら、Settings → Plugins で Milestone をいったんオフにしてからオンに戻すと、新しいコードで起動します。CI では `engines.orca` に対応する Orca のタグ（v1.4.247）を取得して、manifest を検証します。
