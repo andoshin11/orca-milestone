@@ -30,6 +30,8 @@ const AGENT_LABELS = {
   none: ''
 }
 
+const BOT_MARK = '<span class="bot">bot</span>'
+
 const MARKS = { completed: '✓', in_progress: '●', pending: '○' }
 
 function renderTask(task) {
@@ -48,21 +50,33 @@ function renderSession(session) {
 <ol>${session.tasks.map(renderTask).join('')}</ol></section>`
 }
 
-function card(offerId, index, label, lines, extra = '') {
+/** A card of an agent in an Orca chat: the same look, but nothing to press, see next-actions.mjs. */
+function shownCard(label, body) {
+  return `<li><div class="action shown"><span class="label">${escape(label)}</span>${body}</div></li>`
+}
+
+function card(offer, index, label, lines, extra = '') {
   const body = lines.filter(([, text]) => text).map(([kind, text]) => `<span class="${kind}">${escape(text)}</span>`).join('')
-  return `<li><button type="button" class="action" data-next="${escape(offerId)}" data-index="${index}"${extra}><span class="label">${escape(label)}</span>${body}</button></li>`
+  if (offer.chat) return shownCard(label, body)
+  return `<li><button type="button" class="action" data-next="${escape(offer.id)}" data-index="${index}"${extra}><span class="label">${escape(label)}</span>${body}</button></li>`
 }
 
 function renderForm(offer) {
   const questions = offer.questions.map((question, position) => {
-    const options = question.options.map((option, index) =>
-      `<li><button type="button" class="action option" data-form="${escape(offer.id)}" data-question="${position}" data-option="${index}" data-multi="${question.multiSelect ? '1' : '0'}"><span class="label">${escape(option.label)}</span>${option.detail ? `<span class="detail">${escape(option.detail)}</span>` : ''}</button></li>`
-    )
+    const options = question.options.map((option, index) => {
+      const detail = option.detail ? `<span class="detail">${escape(option.detail)}</span>` : ''
+      return offer.chat
+        ? shownCard(option.label, detail)
+        : `<li><button type="button" class="action option" data-form="${escape(offer.id)}" data-question="${position}" data-option="${index}" data-multi="${question.multiSelect ? '1' : '0'}"><span class="label">${escape(option.label)}</span>${detail}</button></li>`
+    })
     const hint = question.multiSelect ? '<p class="hint">複数選択できます</p>' : ''
     return `<div class="question"><p class="ask">${escape(question.question)}</p>${hint}<ol class="actions">${options.join('')}</ol></div>`
   })
+  if (offer.chat) return questions.join('')
   return `${questions.join('')}<button type="button" class="submit" data-submit="${escape(offer.id)}" data-count="${offer.questions.length}" disabled>回答を送信</button>`
 }
+
+const CHAT_NOTE = '<p class="chat-note">このエージェントは Orca のチャットで動いています。ここからは送れないので、チャットで答えてください。</p>'
 
 /**
  * What the agent offers to choose from, one card under another: its next steps, its question or a
@@ -78,20 +92,20 @@ function renderNext(offer) {
     body = renderForm(offer)
   } else if (offer.kind === 'question') {
     heading = '<h2>質問に答える</h2>'
-    const cards = offer.suggestions.map((s, index) => card(offer.id, index, s.label, [['detail', s.detail]]))
+    const cards = offer.suggestions.map((s, index) => card(offer, index, s.label, [['detail', s.detail]]))
     body = `<p class="ask">${escape(offer.question)}</p><ol class="actions">${cards.join('')}</ol>`
   } else if (offer.kind === 'permission') {
     const risk = offer.dangerous ? '<span class="danger">危険なコマンド</span>' : RISK_LABELS[offer.risk] ? `<span class="risk ${escape(offer.risk)}">${RISK_LABELS[offer.risk]}</span>` : ''
     heading = `<h2>許可の確認${risk}</h2>`
     const cards = offer.suggestions.map((s, index) =>
-      card(offer.id, index, s.label, [['detail', s.detail]], s.action === 'allow' && offer.dangerous ? ' data-dangerous="1"' : '')
+      card(offer, index, s.label, [['detail', s.detail]], s.action === 'allow' && offer.dangerous ? ' data-dangerous="1"' : '')
     )
     const where = offer.where ? `<p class="where">場所: ${escape(offer.where)}</p>` : ''
     body = `<p class="ask">${escape(offer.question)}</p>${where}<ol class="actions">${cards.join('')}</ol>`
   } else {
     heading = '<h2>次の作業<span>選ばなくても構いません</span></h2>'
     const cards = offer.suggestions.map((s, index) =>
-      card(offer.id, index, s.label, s.action === 'restart' ? [['detail', s.detail]] : [['reason', s.reason], ['prompt', clip(s.prompt, PROMPT_LINES_MAX)]])
+      card(offer, index, s.label, s.action === 'restart' ? [['detail', s.detail]] : [['reason', s.reason], ['prompt', clip(s.prompt, PROMPT_LINES_MAX)]])
     )
     // Another Mac's daemon sends what the agent said at the end of its turn with the proposal.
     const summary = offer.summary ? `<p class="summary">${escape(clip(offer.summary, GOAL_MAX))}</p>` : ''
@@ -101,8 +115,9 @@ function renderNext(offer) {
   if (offer.allowed?.length > 0) {
     body += `<div class="allowed"><p>このターンでまとめて許可したもの</p><ul>${offer.allowed.map((line) => `<li>${escape(line)}</li>`).join('')}</ul></div>`
   }
+  if (offer.chat) body += CHAT_NOTE
   // Another offer is another set of cards: it replaces the old one without a transition.
-  return `<div class="next ${offer.kind}" data-key="${escape(`next\n${offer.id}`)}">${heading}${body}</div>`
+  return `<div class="next ${offer.kind}${offer.chat ? ' chat' : ''}" data-key="${escape(`next\n${offer.id}`)}">${heading}${body}</div>`
 }
 
 function renderRow(row) {
@@ -116,7 +131,7 @@ function renderRow(row) {
         : ''
   const of = row.total > 0 ? `<span class="of">${row.done} / ${row.total}</span>` : ''
   const bar = row.total > 0 ? `<div class="bar"><div style="width:${percent}%"></div></div>` : ''
-  const repo = row.repo ? `<span class="repo">${escape(row.repo)}</span>` : ''
+  const repo = row.bot ? BOT_MARK : row.repo ? `<span class="repo">${escape(row.repo)}</span>` : ''
   // Every task done, nothing asked of the user: a check instead of the dot. A task in
   // progress turns the dot orange, like its mark in the list.
   const finished = row.kind !== 'attention' && row.total > 0 && row.done === row.total
@@ -200,7 +215,7 @@ function renderFocused(model) {
     return '<p class="empty">ワークスペースを開くと、エージェントの進捗をここに表示します。</p>'
   }
   const agent = AGENT_LABELS[model.agent] ?? ''
-  const header = `<header><h1>${escape(model.workspace)}</h1><span class="agent ${model.agent}">${agent}</span></header>`
+  const header = `<header><h1>${escape(model.workspace)}${model.bot ? BOT_MARK : ''}</h1><span class="agent ${model.agent}">${agent}</span></header>`
   if (model.kind === 'no-tasks') {
     return `${header}<p class="empty">このワークスペースのエージェントはまだタスクを作っていません。</p>${renderNext(model.next)}`
   }

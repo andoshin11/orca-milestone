@@ -16,6 +16,7 @@ import {
   readTaskList,
   readTranscriptHead,
   createPendingReader,
+  createChatReplyReader,
   pendingCall,
   turnEnded,
   pendingQuestion
@@ -81,7 +82,9 @@ export function createMilestoneWorker({
     // A Claude session started with older instructions than the launch hook gives now.
     readLaunch: createLaunchReader(home, { readLaunchInfo }),
     readLaunchInfo,
-    readAllowed: (sessionId) => grants.allowed(sessionId)
+    readAllowed: (sessionId) => grants.allowed(sessionId),
+    // Orca keeps only the start of what an agent in its chat said, without the next block.
+    readReply: createChatReplyReader(home)
   }
   let lastHtml = null
   let started = null

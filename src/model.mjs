@@ -41,6 +41,7 @@ function buildOthers(agents, sessions) {
       workspace: entry.workspace,
       path: entry.path,
       repo: entry.repo ?? null,
+      bot: entry.bot === true,
       focused: entry.focused,
       kind: entry.needsUser ? 'attention' : 'idle',
       working: entry.working && !entry.needsUser,
@@ -90,6 +91,7 @@ export function buildModel(workspace, sessions, agents = [], offers = []) {
   return {
     kind: mine.length > 0 ? 'sessions' : 'no-tasks',
     workspace: workspace.displayName,
+    bot: workspace.bot === true,
     agent: states.includes('working')
       ? 'working'
       : states.includes('blocked') || states.includes('waiting')

@@ -3,6 +3,8 @@
 // - a question: Claude Code's AskUserQuestion, as cards, or as a form for several questions or answers
 // - a permission: a tool waiting to be allowed, in Claude Code or Codex
 // - a restart: a waiting Claude session told something older than the plugin says now, see restart.mjs
+// An agent in an Orca chat (a bot's, or one started as a chat) has no terminal to press keys in, and
+// Orca lets nothing else answer it: its offers are only shown (`chat`), and answered in the chat.
 // The rules match agent-status-panel, which shows the same choices on a phone. The panel says only
 // which offer and which card: the worker reads the agent again when one is pressed, so a card from
 // an earlier turn does nothing, and keys go to a menu only after its screen is read.
@@ -28,6 +30,8 @@ const NEXT_BLOCK = /```next[ \t]*\r?\n([\s\S]*?)\r?\n?```\s*$/
 const CONTROL = /[\u0000-\u001f\u007f]/
 const TRACKED_AGENTS = new Set(['claude', 'codex'])
 const PERMISSION_STATES = ['waiting', 'permission']
+// The pane key of an agent in an Orca chat, which has no terminal.
+const CHAT_PANE = 'structured-agent-session-'
 const USED_MAX = 256
 const SUBMIT_WAIT_SECONDS = '8'
 const SEND_TIMEOUT_MS = 20_000
@@ -92,16 +96,22 @@ export function parseSuggestions(message) {
     .map(({ label, prompt, reason }) => ({ label: label.trim(), prompt: prompt.trim(), reason: reasonOf(reason) }))
 }
 
+function isChat(agent) {
+  return typeof agent.paneKey === 'string' && agent.paneKey.startsWith(CHAT_PANE)
+}
+
 /**
  * The one live main agent of a workspace, or null. With two, a card could reach another agent
- * than the one shown. Orca keeps the record of a pane that has closed, without hasLivePty.
+ * than the one shown. Orca keeps the record of a pane that has closed, without hasLivePty. A chat
+ * has no pty at all: it counts only where no terminal agent runs, and only alone.
  */
 function soleAgent(worktree) {
   if (worktree.isArchived) return null
-  const agents = (worktree.agents ?? []).filter(
-    (agent) => TRACKED_AGENTS.has(agent.agentType) && !agent.parentPaneKey && agent.hasLivePty === true
-  )
-  return agents.length === 1 ? agents[0] : null
+  const main = (worktree.agents ?? []).filter((agent) => TRACKED_AGENTS.has(agent.agentType) && !agent.parentPaneKey)
+  const live = main.filter((agent) => agent.hasLivePty === true)
+  if (live.length > 0) return live.length === 1 ? live[0] : null
+  const chats = main.filter(isChat)
+  return chats.length === 1 ? chats[0] : null
 }
 
 /** Changes with every turn and every call, so a card shown for an earlier one matches nothing. */
@@ -110,7 +120,7 @@ function offerId(agent, extra = '') {
 }
 
 function base(kind, worktree, agent, extra) {
-  return { kind, id: offerId(agent, extra), path: worktree.path, agent: agent.agentType, paneKey: agent.paneKey }
+  return { kind, id: offerId(agent, extra), path: worktree.path, agent: agent.agentType, paneKey: agent.paneKey, ...(isChat(agent) ? { chat: true } : {}) }
 }
 
 const RESTART_CARD = { label: '最新の指示で再開', action: 'restart', detail: '同じ会話のまま、いまの plugin の指示で起動し直します' }
@@ -119,21 +129,32 @@ const RESTART_CARD = { label: '最新の指示で再開', action: 'restart', det
  * What a workspace's agent proposes now: only one that finished its turn. A Claude session told
  * something older gets one more card, to start it again under what the plugin says now.
  * @param launch { sessionId } of that session, or null
+ * @param reply  the whole of what a Claude agent in a chat last said, of which Orca keeps only the start
  */
-export function nextOffer(worktree, launch = null) {
+export function nextOffer(worktree, launch = null, reply = null) {
   const agent = soleAgent(worktree)
   if (agent?.state !== 'done') return null
-  const suggestions = parseSuggestions(agent.lastAssistantMessage)
-  const restart = launch && agent.agentType === 'claude' && !agent.background
+  const suggestions = parseSuggestions(reply ?? agent.lastAssistantMessage)
+  const restart = launch && agent.agentType === 'claude' && !agent.background && !isChat(agent)
   if (restart) suggestions.push(RESTART_CARD)
   if (suggestions.length === 0) return null
   return { ...base('proposal', worktree, agent, restart ? launch.sessionId : ''), suggestions, ...(restart ? { sessionId: launch.sessionId } : {}) }
 }
 
+/**
+ * What a Claude agent in a chat last said, read whole from its transcript; null for any other. Only
+ * for the workspace on screen, the one whose cards show: the search reads several transcripts.
+ */
+async function chatReplyOf(worktree, readReply) {
+  const agent = soleAgent(worktree)
+  if (!worktree.isActive || !agent || !isChat(agent) || agent.agentType !== 'claude' || agent.state !== 'done') return null
+  return readReply(worktree.path, agent.lastAssistantMessage).catch(() => null)
+}
+
 /** Only for the workspace on screen, the one whose cards show, and only while Claude waits idle. */
 async function launchOf(worktree, readLaunch) {
   const agent = soleAgent(worktree)
-  if (!worktree.isActive || agent?.agentType !== 'claude' || agent.state !== 'done' || agent.background) return null
+  if (!worktree.isActive || agent?.agentType !== 'claude' || agent.state !== 'done' || agent.background || isChat(agent)) return null
   return readLaunch(worktree.path).catch(() => null)
 }
 
@@ -257,7 +278,8 @@ async function permissionOffer(worktree, readCall, readPane, readLaunchInfo) {
   if (!call) return null
   const { summary, menuHint } = describeCall(call)
   const dangerous = isDangerous(call)
-  const info = dangerous ? null : await readLaunchInfo(worktree.path).catch(() => null)
+  // Allowing the rest of a turn presses the menu too, which a chat does not have.
+  const info = dangerous || isChat(agent) ? null : await readLaunchInfo(worktree.path).catch(() => null)
   const rest = info && hasGrantHook(info.args)
   return {
     ...base('permission', worktree, agent, call.toolUseId),
@@ -326,18 +348,19 @@ async function codexPermissionOffer(worktree, readPane) {
  * @param readLaunch   resolves a workspace path to its Claude session told something older, see restart.mjs
  * @param readLaunchInfo resolves a workspace path to its Claude session and command line, see restart.mjs
  * @param readAllowed  resolves a session id to what the rest of its turn allowed, see turn-grant.mjs
+ * @param readReply    resolves a workspace path and the start of what its chat's agent said to the whole reply
  */
-export async function offersOf(worktrees, { readQuestion = async () => null, readCall = async () => null, readPane = async () => null, readLaunch = async () => null, readLaunchInfo = async () => null, readAllowed = async () => [] } = {}) {
+export async function offersOf(worktrees, { readQuestion = async () => null, readCall = async () => null, readPane = async () => null, readLaunch = async () => null, readLaunchInfo = async () => null, readAllowed = async () => [], readReply = async () => null } = {}) {
   const offers = []
   for (const worktree of worktrees) {
     const offer =
-      nextOffer(worktree, await launchOf(worktree, readLaunch)) ??
+      nextOffer(worktree, await launchOf(worktree, readLaunch), await chatReplyOf(worktree, readReply)) ??
       (await questionOffer(worktree, readQuestion)) ??
       (await permissionOffer(worktree, readCall, readPane, readLaunchInfo)) ??
       (await codexPermissionOffer(worktree, readPane))
     if (!offer) continue
     // What the rest of this turn allowed unread, listed for the workspace on screen.
-    const allowed = worktree.isActive && offer.agent === 'claude' ? await allowedOf(worktree, readLaunchInfo, readAllowed) : []
+    const allowed = worktree.isActive && offer.agent === 'claude' && !offer.chat ? await allowedOf(worktree, readLaunchInfo, readAllowed) : []
     offers.push(allowed.length > 0 ? { ...offer, allowed } : offer)
   }
   return offers
@@ -373,7 +396,7 @@ export async function readPaneScreen(run, paneKey) {
  * @param run        runs the Orca CLI with arguments and resolves to its JSON reply
  * @returns a function that takes `{ offer, index }` for a card, or `{ offer, answers }` for a form,
  *   and resolves to `{ sent: true }`, or to `{ sent: false, reason }`: `stale` when that card is no
- *   longer on offer, `typing` when Codex has a draft a prompt would join, `confirm` to allow a
+ *   longer on offer, `chat` for an agent in an Orca chat, `typing` when Codex has a draft a prompt would join, `confirm` to allow a
  *   dangerous command without `confirmed: true`, or what `restart` resolves to. It throws when sending fails.
  * @param restart    starts a session again, see restart.mjs
  * @param grantRest  allows the rest of the turn of a session id, see turn-grant.mjs
@@ -420,6 +443,8 @@ export function createNextSender({ readOffers, run, restart = async () => ({ sen
     if (typeof offer !== 'string' || used.has(offer)) return stale
     const found = (await readOffers()).find((candidate) => candidate.id === offer)
     if (!found) return stale
+    // Answered in Orca's chat: nothing here reaches it.
+    if (found.chat) return { sent: false, reason: 'chat' }
     const keys = answers !== undefined ? answerKeys(found.questions, answers) : null
     const suggestion = answers === undefined && Number.isInteger(index) ? found.suggestions?.[index] : null
     if (!keys && !suggestion) return stale

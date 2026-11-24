@@ -16,6 +16,9 @@ const TRANSCRIPT_HEAD_BYTES = 512 * 1024
 const TRANSCRIPT_CHUNK_BYTES = 1024 * 1024
 // A pending tool call is among the last lines of its transcript.
 const TRANSCRIPT_TAIL_BYTES = 1024 * 1024
+// How many of a folder's newest transcripts are searched for the reply of an agent in a chat.
+const CHAT_TRANSCRIPTS_MAX = 30
+const CHAT_REPLIES_KEPT = 32
 
 export function claudePaths(home) {
   return {
@@ -454,6 +457,82 @@ export function pendingQuestion(text) {
 export function pendingCall(text) {
   const part = pendingToolUse(text, () => true)
   return part ? { toolUseId: part.id, name: part.name, input: part.input ?? {}, ...(part.cwd ? { cwd: part.cwd } : {}) } : null
+}
+
+/**
+ * The text of Claude's last reply, when nothing was typed after it. Orca cuts what an agent in its
+ * chat last said to a few lines, which drops the next block at the end; the transcript keeps it all.
+ * A reply comes in several entries, one per part; its text is the last part.
+ */
+export function lastReply(text) {
+  for (const line of text.split('\n').toReversed()) {
+    if (!line.includes('"type"')) continue
+    let entry
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      continue
+    }
+    const content = entry.message?.content
+    if (entry.type === 'user') {
+      // A prompt typed after the reply; tool results and meta lines are part of a turn.
+      if (!entry.isMeta && !entry.isCompactSummary && (typeof content === 'string' || content?.some?.((part) => part?.type === 'text'))) return null
+      continue
+    }
+    if (entry.type !== 'assistant' || !Array.isArray(content)) continue
+    const texts = content.filter((part) => part?.type === 'text' && typeof part.text === 'string').map((part) => part.text)
+    if (texts.length > 0) return texts.join('\n')
+  }
+  return null
+}
+
+/** Claude Code keeps the transcripts of a folder under its path with every other character a dash. */
+function projectDir(projectsRoot, path) {
+  return join(projectsRoot, path.replace(/[^a-zA-Z0-9]/g, '-'))
+}
+
+function collapse(text) {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Reads, for a workspace path and the start of what an agent in an Orca chat last said, the whole
+ * reply. Orca names the chat's own session, not Claude's, and its process ends between turns, so
+ * the reply is found among the folder's newest transcripts by the start Orca keeps. A bot's folder
+ * also holds the runs of its automations; one whose last reply starts otherwise is not the chat's.
+ * Null when none matches, as when Orca's line is behind the transcript.
+ */
+export function createChatReplyReader(home) {
+  const { projectsRoot } = claudePaths(home)
+  const found = new Map()
+  return async function readChatReply(path, said) {
+    const start = typeof said === 'string' ? collapse(said) : ''
+    if (!start) return null
+    const key = `${path}\n${start}`
+    if (found.has(key)) return found.get(key)
+    const dir = projectDir(projectsRoot, path)
+    let names
+    try {
+      names = (await readdir(dir)).filter((name) => name.endsWith('.jsonl'))
+    } catch {
+      return null
+    }
+    const dated = await Promise.all(names.map(async (name) => ({ name, at: (await stat(join(dir, name)).catch(() => null))?.mtimeMs ?? 0 })))
+    let reply = null
+    for (const { name } of dated.sort((a, b) => b.at - a.at).slice(0, CHAT_TRANSCRIPTS_MAX)) {
+      const last = lastReply(await readTail(join(dir, name)).catch(() => ''))
+      if (last && collapse(last).startsWith(start)) {
+        reply = last
+        break
+      }
+    }
+    // A miss is tried again: the transcript can trail Orca's line.
+    if (reply) {
+      found.set(key, reply)
+      if (found.size > CHAT_REPLIES_KEPT) found.delete(found.keys().next().value)
+    }
+    return reply
+  }
 }
 
 /**

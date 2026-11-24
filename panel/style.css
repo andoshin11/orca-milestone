@@ -125,6 +125,12 @@ code { font-size: 12px; }
 .action.armed { background: color-mix(in oklch, var(--ms-todo) 16%, var(--orca-card));
   border-color: color-mix(in oklch, var(--ms-todo) 60%, transparent); }
 .next .status { margin: 6px 0 0; font-size: 11px; color: var(--ms-todo); }
+/* An agent in an Orca chat: its cards are only shown, and answered in the chat. */
+.action.shown, .action.shown:hover { cursor: default; background: var(--orca-card); transform: none; border-style: dashed; }
+.next .chat-note { margin: 8px 0 0; font-size: 11px; color: var(--orca-muted-foreground); }
+/* A bot's home, marked in place of a repository. */
+.row .bot, header .bot { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600;
+  color: var(--orca-muted-foreground); background: color-mix(in oklch, var(--orca-foreground) 8%, transparent); }
 @media (prefers-reduced-motion: reduce) {
   .action { transition: none; }
 }
