@@ -207,7 +207,9 @@ function renderRemote(remote) {
 
 export function renderBody(model) {
   // The focused workspace sits at the top and the others at the bottom edge, apart.
-  return `<main>${renderFocused(model)}</main>${renderOthers(model.others)}${renderRemote(model.remote)}`
+  // A workspace of another Mac in focus keeps the height it needs, as a focused one here does.
+  const main = model.host ? '<main class="paired">' : '<main>'
+  return `${main}${renderFocused(model)}</main>${renderOthers(model.others)}${renderRemote(model.remote)}`
 }
 
 function renderFocused(model) {
@@ -215,7 +217,8 @@ function renderFocused(model) {
     return '<p class="empty">ワークスペースを開くと、エージェントの進捗をここに表示します。</p>'
   }
   const agent = AGENT_LABELS[model.agent] ?? ''
-  const header = `<header><h1>${escape(model.workspace)}${model.bot ? BOT_MARK : ''}</h1><span class="agent ${model.agent}">${agent}</span></header>`
+  const host = model.host ? `<span class="host">${escape(model.host)}</span>` : ''
+  const header = `<header><h1>${escape(model.workspace)}${model.bot ? BOT_MARK : ''}${host}</h1><span class="agent ${model.agent}">${agent}</span></header>`
   if (model.kind === 'no-tasks') {
     return `${header}<p class="empty">このワークスペースのエージェントはまだタスクを作っていません。</p>${renderNext(model.next)}`
   }

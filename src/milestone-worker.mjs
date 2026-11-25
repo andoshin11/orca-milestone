@@ -22,7 +22,7 @@ import {
   pendingQuestion
 } from './claude-sessions.mjs'
 import { readCodexProgress } from './codex-progress.mjs'
-import { buildModel } from './model.mjs'
+import { buildModel, withPairedFocus } from './model.mjs'
 import { createNextSender, readPaneScreen, readTerminalScreen } from './next-actions.mjs'
 import { createLaunchInfoReader, createLaunchReader, createRestarter } from './restart.mjs'
 import { createGrantAccess } from './turn-grant.mjs'
@@ -66,6 +66,9 @@ export function createMilestoneWorker({
   // Lists already replayed from a transcript, by list and the time it last changed.
   const replayed = new Map()
   let workspace = null
+  // The focused workspace as Orca's `workspace.changed` gives it. A paired server's workspace is
+  // only known this way.
+  let context = null
   let agents = []
   let offers = []
   const runArgs = (args, timeout) => runCli(cli, args, timeout)
@@ -224,7 +227,7 @@ export function createMilestoneWorker({
       }
     }
     const sessions = await allSessions()
-    publish(renderBody({ ...buildModel(workspace, sessions, agents, offers), remote: remoteView }))
+    publish(renderBody(withPairedFocus(buildModel(workspace, sessions, agents, offers), context, remoteView)))
   }
 
   /** Reads the daemon the settings name, one read at a time, and redraws with what it has. */
@@ -319,6 +322,12 @@ export function createMilestoneWorker({
     timer = setTimeout(() => void refresh(), DEBOUNCE_MS)
   }
 
+  /** Orca focused another workspace, here or on a paired server. */
+  function focusChanged(focused) {
+    context = focused ?? null
+    schedule(true)
+  }
+
   function agentChanged({ paneKey, state, mainAgent }) {
     const key = `${state}\n${mainAgent?.state ?? ''}`
     if (paneStates.get(paneKey) === key) return
@@ -346,5 +355,5 @@ export function createMilestoneWorker({
     return started
   }
 
-  return { start, refresh, schedule, agentChanged, view, openWorkspace, sendNext, readRemote }
+  return { start, refresh, schedule, focusChanged, agentChanged, view, openWorkspace, sendNext, readRemote }
 }

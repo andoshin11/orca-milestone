@@ -28,8 +28,8 @@ export default function activate(orca) {
     await worker.start()
     worker.agentChanged(event)
   })
-  orca.events.on('workspace.changed', async () => {
+  orca.events.on('workspace.changed', async (event) => {
     await worker.start()
-    worker.schedule(true)
+    worker.focusChanged(event?.context)
   })
 }
