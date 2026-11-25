@@ -48,14 +48,16 @@ test('readSnapshot tells each kind of offer by its fields and puts those needing
   assert.throws(() => readSnapshot({}), TypeError)
 })
 
-test('the panel shows the remote sessions with their cards, and the daemon’s failures in words', () => {
+test('the panel shows the remote sessions as rows like the other workspaces, and the daemon’s failures in words', () => {
   const remote = { label: 'Mac mini', ...readSnapshot(BODY) }
   const html = renderBody({ kind: 'no-workspace', others: { attention: 0, rows: [] }, remote })
   assert.ok(html.includes('<div class="remote"><h2><span>Mac mini</span><span class="attention">要確認 3</span></h2>'))
-  assert.ok(html.includes('data-next="o-b" data-index="0" data-dangerous="1"'))
-  assert.ok(html.includes('data-submit="o-d"'))
-  assert.ok(html.includes('Deploy to staging'))
-  assert.ok(html.includes('<p class="summary">Shipped; tests pass.</p>'))
+  // Their cards show only once their workspace is opened, as for a workspace here.
+  assert.ok(!html.includes('data-next='))
+  assert.ok(!html.includes('data-submit='))
+  assert.ok(!html.includes('Deploy to staging'))
+  assert.ok(html.includes('<span class="badge">要確認</span>'))
+  assert.ok(html.includes('class="row idle has-detail"'), 'a row with tasks expands on hover')
   assert.ok(html.includes('1 / 3'))
   assert.ok(!html.includes('data-open='), 'a remote row has no path here to open')
   const failed = renderBody({ kind: 'no-workspace', others: { attention: 0, rows: [] }, remote: { label: 'Mac mini', error: 'unreachable' } })
