@@ -168,9 +168,12 @@ const REMOTE_ERRORS = {
   unreadable: '読めない形式です。agent-status-panel の版を確かめてください。'
 }
 
-/** A session of another Mac: a row like the other workspaces, with its cards always shown under it. */
+/**
+ * A session of another Mac: a row like the other workspaces here, its goal and tasks shown on
+ * hover. Its cards show at the top once its workspace is opened, as for a workspace here.
+ */
 function renderRemoteSession(session) {
-  const row = renderRow({
+  return renderRow({
     workspace: session.workspace || session.agent,
     repo: null,
     path: null,
@@ -182,8 +185,6 @@ function renderRemoteSession(session) {
     total: session.total,
     tasks: session.tasks
   })
-  // In an item of its own: a row stacks its expansion above its head.
-  return session.offer ? `${row}<li class="remote-next">${renderNext(session.offer)}</li>` : row
 }
 
 /**
