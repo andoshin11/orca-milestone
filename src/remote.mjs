@@ -3,6 +3,8 @@
 // the Mac running the agents shows them: their task files are not on this disk.
 // The address comes from the plugin's settings and is never written into the repository.
 
+import { createHash } from 'node:crypto'
+
 const TIMEOUT_MS = 8_000
 const MARKS = { c: 'completed', i: 'in_progress', p: 'pending' }
 
@@ -98,6 +100,7 @@ export function readSnapshot(body) {
       id: session.id,
       agent: session.agent ?? '',
       workspace: typeof session.workspace === 'string' ? session.workspace : '',
+      place: typeof session.place === 'string' ? session.place : '',
       goal: typeof session.goal === 'string' && session.goal ? session.goal : null,
       attention: typeof session.attention === 'string' ? session.attention : '',
       finished: session.state === 'finished',
@@ -162,4 +165,32 @@ export function createRemoteClient({ fetchImpl = fetch, timeoutMs = TIMEOUT_MS }
   }
 
   return { read, press }
+}
+
+/**
+ * The path, on the Mac it lives on, of a workspace this Orca shows from a paired Orca server. Orca
+ * names such a workspace `<project id>::<path>` and gives its worker no other trace of the path.
+ */
+export function pairedPathOf(context) {
+  const id = typeof context?.workspaceId === 'string' ? context.workspaceId : ''
+  const at = id.lastIndexOf('::')
+  const path = at >= 0 ? id.slice(at + 2) : ''
+  return path.startsWith('/') ? path : null
+}
+
+/** Where a session runs as the daemon says it, a hash of its directory. */
+export function placeOf(path) {
+  return createHash('sha256').update(path).digest('hex').slice(0, 16)
+}
+
+/**
+ * Splits the sessions of the daemon into those of the workspace at a path on that Mac and the
+ * others. A daemon too old to say where its sessions run matches none.
+ */
+export function splitByPlace(sessions, path) {
+  const place = placeOf(path)
+  const mine = []
+  const others = []
+  for (const session of sessions) (session.place === place ? mine : others).push(session)
+  return { mine, others }
 }

@@ -139,7 +139,11 @@ code { font-size: 12px; }
    is the one the agents do not run on, so they take all the height left below the other workspaces
    and scroll on their own; the focused workspace here keeps only the height it needs, up to 30%. */
 .remote { flex: 1 1 0; min-height: 0; overflow: auto; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--orca-border); }
-body:has(> .remote) main { flex: 0 1 auto; max-height: 30vh; }
+body:has(> .remote) main:not(.paired) { flex: 0 1 auto; max-height: 30vh; }
+/* A workspace of that Mac in focus: its tasks and cards above, the rest of its sessions below. */
+body:has(> main.paired) .remote { flex: 0 1 auto; max-height: 40vh; }
+header .host { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600;
+  color: var(--orca-muted-foreground); background: color-mix(in oklch, var(--orca-foreground) 8%, transparent); }
 .remote h2 { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 6px;
   font-size: 11px; font-weight: 600; color: var(--orca-muted-foreground); }
 .remote h2 .attention { color: var(--ms-todo); }
